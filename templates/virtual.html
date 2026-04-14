@@ -1,0 +1,172 @@
+{% extends "base.html" %}
+{% block title %}Virtual{% endblock %}
+{% block topbar_title %}<i class="bi bi-pc-display-horizontal me-2"></i>Virtual{% endblock %}
+
+{% block topbar_actions %}
+{% if user.role in ('admin', 'operator') %}
+<button type="button" onclick="openDialog('createVmDialog')"><i class="bi bi-plus-lg me-1"></i>Create VM</button>
+{% endif %}
+{% endblock %}
+
+{% block content %}
+<article id="virtualAlert" class="flash hidden"></article>
+
+<div class="page-intro">
+  <div>
+    <h1>Virtual machines</h1>
+  </div>
+  <div class="metric-grid" style="min-width:min(24rem, 100%);">
+    <article class="metric-card">
+      <div class="metric-icon"><i class="bi bi-pc-display-horizontal"></i></div>
+      <div class="metric-label">Total</div>
+      <div class="metric-value">{{ total }}</div>
+    </article>
+    <article class="metric-card">
+      <div class="metric-icon"><i class="bi bi-play-circle"></i></div>
+      <div class="metric-label">Running</div>
+      <div class="metric-value">{{ running }}</div>
+    </article>
+  </div>
+</div>
+
+<article class="panel">
+  {% if not vms %}
+  <article class="empty-state">
+    <div class="empty-icon"><i class="bi bi-pc-display-horizontal"></i></div>
+    <h3>No virtual machines found</h3>
+    <p>No VMs were returned from any registered agent.</p>
+  </article>
+  {% else %}
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Hypervisor</th>
+          <th>State</th>
+          <th>vCPU</th>
+          <th>RAM</th>
+          <th>Disk</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for vm in vms %}
+        {% set state = vm.get('state', 'unknown') | lower %}
+        <tr>
+          <td><a href="/vm/{{ vm.agent_name }}/{{ vm.name }}"><strong>{{ vm.name }}</strong></a></td>
+          <td class="muted small">{{ vm.agent_name }}</td>
+          <td><span class="status-pill status-{{ state if state in ('running','stopped','paused') else 'unknown' }}">{{ state }}</span></td>
+          <td>{{ vm.get('vcpu') or '—' }}</td>
+          <td>
+            {% set ram = vm.get('ram_mb') %}
+            {% if ram %}
+              {% if ram >= 1024 %}{{ (ram / 1024) | round(1) }} GB{% else %}{{ ram }} MB{% endif %}
+            {% else %}—{% endif %}
+          </td>
+          <td>
+            {% set disk = vm.get('disk_gb') %}
+            {% if disk %}{{ disk }} GB{% else %}—{% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+</article>
+
+{% if user.role in ('admin', 'operator') %}
+<dialog id="createVmDialog">
+  <article style="margin:0;">
+    <div class="dialog-header">
+      <h3 class="dialog-title"><i class="bi bi-plus-square me-1"></i>Create VM</h3>
+      <button type="button" class="dialog-close" onclick="closeDialog('createVmDialog')"><i class="bi bi-x-lg"></i></button>
+    </div>
+    <label for="vmAgent">Hypervisor</label>
+    <select id="vmAgent">
+      {% for agent in agents %}
+      {% if agent.reachable %}
+      <option value="{{ agent.name }}">{{ agent.name }}</option>
+      {% endif %}
+      {% endfor %}
+    </select>
+    <label for="vmName">Name</label>
+    <input type="text" id="vmName" placeholder="e.g. ubuntu-3" autocomplete="off">
+    <div class="metric-grid" style="grid-template-columns: 1fr 1fr 1fr; gap: 0.75rem;">
+      <label>
+        vCPU
+        <input type="number" id="vmCpu" value="2" min="1" max="64">
+      </label>
+      <label>
+        Memory (GiB)
+        <input type="number" id="vmMemory" value="4" min="1" max="512">
+      </label>
+      <label>
+        Disk (GiB)
+        <input type="number" id="vmDisk" value="20" min="1" max="2048">
+      </label>
+    </div>
+    <label for="vmImagePreset">Cloud image</label>
+    <select id="vmImagePreset">
+      <option value="https://cloud-images.ubuntu.com/resolute/current/resolute-server-cloudimg-amd64.img">Ubuntu 26.04 LTS (Resolute)</option>
+      <option value="https://cloud-images.ubuntu.com/noble/current/noble-server-cloudimg-amd64.img">Ubuntu 24.04 LTS (Noble)</option>
+      <option value="https://cloud-images.ubuntu.com/jammy/current/jammy-server-cloudimg-amd64.img">Ubuntu 22.04 LTS (Jammy)</option>
+      <option value="https://cloud-images.ubuntu.com/focal/current/focal-server-cloudimg-amd64.img">Ubuntu 20.04 LTS (Focal)</option>
+    </select>
+    <label for="vmAutomationUser">Automation user</label>
+    <input type="text" id="vmAutomationUser" value="ubuntu" autocomplete="off">
+    <label for="vmAuthorizedKey">Authorized key (public key)</label>
+    <textarea id="vmAuthorizedKey" rows="3" placeholder="ssh-rsa AAAA..." style="font-family: monospace; font-size: 0.8rem; resize: vertical;"></textarea>
+    <div class="dialog-footer">
+      <button type="button" class="secondary" onclick="closeDialog('createVmDialog')">Cancel</button>
+      <button type="button" onclick="createVm()"><i class="bi bi-plus-lg me-1"></i>Create</button>
+    </div>
+  </article>
+</dialog>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+{% if user.role in ('admin', 'operator') %}
+<script>
+function getImageUrl() {
+  return document.getElementById('vmImagePreset').value;
+}
+
+async function createVm() {
+  const alert = document.getElementById('virtualAlert');
+  const agentName = document.getElementById('vmAgent').value;
+  const name = document.getElementById('vmName').value.trim();
+  const cpu = parseInt(document.getElementById('vmCpu').value, 10);
+  const memory_gib = parseInt(document.getElementById('vmMemory').value, 10);
+  const disk_gib = parseInt(document.getElementById('vmDisk').value, 10);
+  const cloud_image_url = getImageUrl();
+  const automation_user = document.getElementById('vmAutomationUser').value.trim() || 'ubuntu';
+  const automation_user_pubkey = document.getElementById('vmAuthorizedKey').value.trim();
+
+  if (!name) {
+    showInlineAlert(alert, 'warning', 'VM name is required.');
+    return;
+  }
+  if (!automation_user_pubkey) {
+    showInlineAlert(alert, 'warning', 'Authorized key is required.');
+    return;
+  }
+
+  closeDialog('createVmDialog');
+  try {
+    const data = await apiFetch(`/api/agents/${encodeURIComponent(agentName)}/vm/create`, 'POST', {
+      name, cpu, memory_gib, disks_gib: [disk_gib], cloud_image_url,
+      automation_user, automation_user_pubkey
+    });
+    showInlineAlert(alert, 'success', `Create job queued (job_id: ${data.job_id || '?'})`);
+    if (data.job_id) {
+      setTimeout(() => { window.location = `/jobs/${data.job_id}`; }, 1200);
+    }
+  } catch (e) {
+    showInlineAlert(alert, 'danger', e.message || 'Failed to create VM.');
+  }
+}
+</script>
+{% endif %}
+{% endblock %}

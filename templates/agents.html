@@ -1,0 +1,135 @@
+{% extends "base.html" %}
+{% block title %}Agents{% endblock %}
+{% block topbar_title %}<i class="bi bi-cpu me-2"></i>Agents{% endblock %}
+
+{% block topbar_actions %}
+{% if user.role == 'admin' %}
+<button type="button" onclick="openDialog('registerAgentDialog')"><i class="bi bi-plus-lg me-1"></i>Register agent</button>
+{% endif %}
+{% endblock %}
+
+{% block content %}
+<article id="agentAlert" class="flash hidden"></article>
+
+<div class="page-intro">
+  <div>
+    <h1>Agent inventory</h1>
+  </div>
+  <div class="metric-grid" style="min-width:min(24rem, 100%);">
+    <article class="metric-card">
+      <div class="metric-icon"><i class="bi bi-hdd-network"></i></div>
+      <div class="metric-label">Agents</div>
+      <div class="metric-value">{{ agents | length }}</div>
+    </article>
+    <article class="metric-card">
+      <div class="metric-icon"><i class="bi bi-broadcast-pin"></i></div>
+      <div class="metric-label">Reachable</div>
+      <div class="metric-value">{{ agents | selectattr('reachable') | list | length }}</div>
+    </article>
+  </div>
+</div>
+
+<article class="panel">
+  {% if agents %}
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>URL</th>
+          <th>Status</th>
+          <th>Last seen</th>
+          <th>VMs</th>
+          {% if user.role == 'admin' %}<th class="right">Action</th>{% endif %}
+        </tr>
+      </thead>
+      <tbody>
+        {% for agent in agents %}
+        {% set reachable = agent.get('reachable', False) %}
+        <tr>
+          <td><strong><i class="bi bi-server me-1 muted"></i>{{ agent.name }}</strong></td>
+          <td class="mono small muted">{{ agent.get('url', '—') }}</td>
+          <td>
+            {% if reachable %}
+            <span class="status-pill status-running"><i class="bi bi-check-circle"></i>Reachable</span>
+            {% else %}
+            <span class="status-pill status-failed"><i class="bi bi-x-octagon"></i>Unreachable</span>
+            {% endif %}
+          </td>
+          <td class="muted small">{{ agent.get('last_seen', '—') }}</td>
+          <td>{{ agent.get('vm_count', 0) }}</td>
+          {% if user.role == 'admin' %}
+          <td class="right">
+            <button type="button" class="btn-ghost-danger" onclick="removeAgent('{{ agent.name }}')">
+              <i class="bi bi-trash me-1"></i>Remove
+            </button>
+          </td>
+          {% endif %}
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <article class="empty-state">
+    <div class="empty-icon"><i class="bi bi-hdd-network"></i></div>
+    <h3>No registered agents</h3>
+    <p>The dashboard does not know about any hypervisors yet. {% if user.role == 'admin' %}Register one to begin managing infrastructure.{% endif %}</p>
+  </article>
+  {% endif %}
+</article>
+
+{% if user.role == 'admin' %}
+<dialog id="registerAgentDialog">
+  <article style="margin:0;">
+    <div class="dialog-header">
+      <h3 class="dialog-title"><i class="bi bi-plus-square me-1"></i>Register agent</h3>
+      <button type="button" class="dialog-close" onclick="closeDialog('registerAgentDialog')"><i class="bi bi-x-lg"></i></button>
+    </div>
+    <label for="agentName">Name</label>
+    <input type="text" id="agentName" placeholder="e.g. hv-01">
+    <label for="agentUrl">URL</label>
+    <input type="url" id="agentUrl" placeholder="http://192.168.1.10:9090">
+    <div class="dialog-footer">
+      <button type="button" class="secondary" onclick="closeDialog('registerAgentDialog')">Cancel</button>
+      <button type="button" onclick="registerAgent()"><i class="bi bi-plus-lg me-1"></i>Register</button>
+    </div>
+  </article>
+</dialog>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+{% if user.role == 'admin' %}
+<script>
+async function registerAgent() {
+  const name = document.getElementById('agentName').value.trim();
+  const url = document.getElementById('agentUrl').value.trim();
+  const alert = document.getElementById('agentAlert');
+  if (!name || !url) {
+    showInlineAlert(alert, 'warning', 'Both name and URL are required.');
+    return;
+  }
+  try {
+    await apiFetch('/api/agents/register', 'POST', { name, url });
+    closeDialog('registerAgentDialog');
+    location.reload();
+  } catch (e) {
+    closeDialog('registerAgentDialog');
+    showInlineAlert(alert, 'danger', e.message || 'Failed to register agent.');
+  }
+}
+
+async function removeAgent(name) {
+  if (!confirm(`Remove agent "${name}"?`)) return;
+  const alert = document.getElementById('agentAlert');
+  try {
+    await apiFetch(`/api/agents/${encodeURIComponent(name)}`, 'DELETE');
+    location.reload();
+  } catch (e) {
+    showInlineAlert(alert, 'danger', e.message || 'Failed to remove agent.');
+  }
+}
+</script>
+{% endif %}
+{% endblock %}

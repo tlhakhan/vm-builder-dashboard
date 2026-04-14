@@ -1,0 +1,228 @@
+{% extends "base.html" %}
+{% set vm_display = vm_name if vm_name else '—' %}
+{% block title %}{{ vm_display }}{% endblock %}
+{% block topbar_title %}<i class="bi bi-pc-display-horizontal me-2"></i>{{ vm_name }}{% endblock %}
+
+{% block topbar_actions %}
+{% if user.role in ('admin', 'operator') and vm %}
+<button type="button" class="btn-start{% if vm.get('state', '') | lower == 'running' %} btn-start-disabled{% endif %}" {% if vm.get('state', '') | lower == 'running' %}disabled{% endif %} onclick="vmAction('start')">
+  <i class="bi bi-play-fill me-1"></i>Start
+</button>
+<button type="button" class="btn-shutdown" {% if vm.get('state', '') | lower != 'running' %}disabled{% endif %} onclick="vmAction('shutdown')">
+  <i class="bi bi-stop-fill me-1"></i>Shutdown
+</button>
+{% endif %}
+{% endblock %}
+
+{% block content %}
+<article id="actionAlert" class="flash hidden" style="margin-bottom:1rem;"></article>
+
+{% if not vm %}
+<article class="empty-state">
+  <div class="empty-icon"><i class="bi bi-exclamation-diamond"></i></div>
+  <h3>VM details unavailable</h3>
+  <p>The selected VM could not be loaded right now. The agent may be unreachable or the VM may no longer exist.</p>
+</article>
+{% else %}
+{% set state = vm.get('state', 'unknown') | lower %}
+
+<div class="split" style="align-items:start;">
+
+  {# Left — VM specs #}
+  <article class="panel">
+    <div class="panel-header">
+      <h2 class="panel-title">
+        <i class="bi bi-pc-display-horizontal"></i>{{ vm_name }}
+      </h2>
+      <span class="status-pill status-{{ state if state in ('running','stopped','paused') else 'unknown' }}">{{ state }}</span>
+    </div>
+    <table class="spec-table">
+      <tbody>
+        <tr>
+          <td class="spec-label">vCPU</td>
+          <td>{{ vm.get('vcpu') or '—' }}</td>
+        </tr>
+        <tr>
+          <td class="spec-label">RAM</td>
+          <td>
+            {% set ram = vm.get('ram_mb') %}
+            {% if ram %}
+              {% if ram >= 1024 %}{{ (ram / 1024) | round(1) }} GB{% else %}{{ ram }} MB{% endif %}
+            {% else %}—{% endif %}
+          </td>
+        </tr>
+        <tr>
+          <td class="spec-label">Disk</td>
+          <td>
+            {% set disk = vm.get('disk_gb') %}
+            {% if disk %}{{ disk }} GB{% else %}—{% endif %}
+          </td>
+        </tr>
+        {% if vm.get('autostart') is not none %}
+        {% set autostart_on = vm.get('autostart') | string | lower in ('enable', 'enabled', 'true', '1', 'yes') %}
+        <tr>
+          <td class="spec-label">Autostart</td>
+          <td><span class="autostart-badge {{ 'autostart-on' if autostart_on else 'autostart-off' }}">{{ 'true' if autostart_on else 'false' }}</span></td>
+        </tr>
+        {% endif %}
+        <tr>
+          <td class="spec-label">Hypervisor</td>
+          <td>{{ agent_name }}</td>
+        </tr>
+      </tbody>
+    </table>
+
+  </article>
+
+  {# Right — Past jobs #}
+  <article class="panel">
+    <div class="panel-header">
+      <h2 class="panel-title"><i class="bi bi-clock-history"></i>Past jobs</h2>
+      <span class="soft-pill">{{ jobs | length }}</span>
+    </div>
+    {% if jobs %}
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Action</th>
+            <th>Status</th>
+            <th>Updated</th>
+            <th class="right">Open</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for job in jobs %}
+          <tr>
+            <td>{{ job.action }}</td>
+            <td><span class="status-pill status-{{ job.status if job.status in ('pending','running','done','failed') else 'unknown' }}">{{ job.status }}</span></td>
+            <td class="muted small" data-ts="{{ job.updated_at or job.created_at }}">{{ job.updated_at or job.created_at }}</td>
+            <td class="right"><a href="/jobs/{{ job.id }}" role="button" class="btn-open"><i class="bi bi-box-arrow-up-right"></i></a></td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <article class="empty-state">
+      <div class="empty-icon"><i class="bi bi-journal-x"></i></div>
+      <h3>No jobs recorded</h3>
+    </article>
+    {% endif %}
+  </article>
+
+</div>
+
+{% if user.role in ('admin', 'operator') %}
+<article class="panel danger-zone" style="margin-top:1.25rem;">
+  <div class="panel-header">
+    <h2 class="panel-title" style="color:var(--app-danger);"><i class="bi bi-exclamation-octagon"></i>Danger zone</h2>
+  </div>
+  <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:0.75rem;">
+    <div>
+      <strong>Delete this VM</strong>
+      <p class="muted small" style="margin:0;">Permanently destroys <strong>{{ vm_name }}</strong> and all its data. This cannot be undone.</p>
+    </div>
+    <button type="button" class="danger-btn" onclick="openDialog('deleteVmDialog')">
+      <i class="bi bi-trash me-1"></i>Delete VM
+    </button>
+  </div>
+</article>
+{% endif %}
+
+<dialog id="deleteVmDialog">
+  <article style="margin:0;">
+    <div class="dialog-header">
+      <h3 class="dialog-title"><i class="bi bi-exclamation-octagon me-1"></i>Delete VM</h3>
+      <button type="button" class="dialog-close" onclick="closeDialog('deleteVmDialog')"><i class="bi bi-x-lg"></i></button>
+    </div>
+    <p>This will permanently destroy <strong>{{ vm_name }}</strong>. Type the VM name to confirm.</p>
+    <input type="text" id="deleteConfirmInput" placeholder="{{ vm_name }}" autocomplete="off">
+    <div class="dialog-footer">
+      <button type="button" class="secondary" onclick="closeDialog('deleteVmDialog')">Cancel</button>
+      <button type="button" id="btnConfirmDelete" class="contrast" disabled onclick="deleteVm()">
+        <i class="bi bi-trash me-1"></i>Delete
+      </button>
+    </div>
+  </article>
+</dialog>
+{% endif %}
+{% endblock %}
+
+{% block head %}
+<style>
+  .spec-table { width: 100%; margin: 0; }
+  .spec-table td { padding: 0.45rem 0; border-bottom: 1px solid var(--app-border); }
+  .spec-table tbody tr:last-child td { border-bottom: 0; }
+  .spec-label { color: var(--app-text-muted); font-size: 0.82rem; width: 7rem; }
+.autostart-badge { display: inline-block; padding: 0.15rem 0.55rem; border-radius: 999px; font-size: 0.78rem; font-weight: 600; }
+  .autostart-on  { background: #16a34a; color: #fff; }
+  .autostart-off { background: #dc2626; color: #fff; }
+  .danger-zone { border: 1px solid rgba(220,38,38,0.25); }
+  .danger-zone .panel-header { border-bottom: 1px solid rgba(220,38,38,0.15); }
+  .danger-btn { background: #dc2626; border-color: #dc2626; color: #fff; padding: 0.35rem 0.85rem; font-size: 0.85rem; width: auto; margin: 0; }
+  .danger-btn:hover { background: #b91c1c; border-color: #b91c1c; }
+  .btn-start { background: #16a34a; border-color: #16a34a; color: #fff; }
+  .btn-start:hover:not(:disabled) { background: #15803d; border-color: #15803d; }
+  .btn-start:disabled, .btn-shutdown:disabled { background: #e2e8f0; border-color: #e2e8f0; color: #94a3b8; opacity: 1; }
+  .btn-shutdown { background: #d97706; border-color: #d97706; color: #fff; }
+  .btn-shutdown:hover:not(:disabled) { background: #b45309; border-color: #b45309; }
+</style>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const AGENT_NAME = {{ agent_name | tojson }};
+const VM_NAME = {{ vm_name | tojson }};
+
+function timeAgo(isoStr) {
+  if (!isoStr) return '—';
+  const d = new Date(isoStr.endsWith('Z') ? isoStr : isoStr + 'Z');
+  const secs = Math.floor((Date.now() - d.getTime()) / 1000);
+  if (isNaN(secs) || secs < 0) return isoStr;
+  if (secs < 60) return `${secs}s ago`;
+  const mins = Math.floor(secs / 60);
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  const days = Math.floor(hrs / 24);
+  return `${days}d ago`;
+}
+
+document.querySelectorAll('[data-ts]').forEach(el => {
+  el.textContent = timeAgo(el.dataset.ts);
+});
+
+const confirmInput = document.getElementById('deleteConfirmInput');
+if (confirmInput) {
+  confirmInput.addEventListener('input', () => {
+    document.getElementById('btnConfirmDelete').disabled = confirmInput.value !== VM_NAME;
+  });
+}
+
+async function vmAction(action) {
+  const alert = document.getElementById('actionAlert');
+  try {
+    await apiFetch(`/api/agents/${AGENT_NAME}/vm/${VM_NAME}/${action}`, 'POST');
+    showInlineAlert(alert, 'success', `${action} initiated.`);
+    setTimeout(() => location.reload(), 1500);
+  } catch (e) {
+    showInlineAlert(alert, 'danger', e.message || `Failed to ${action}.`);
+  }
+}
+
+async function deleteVm() {
+  const alert = document.getElementById('actionAlert');
+  closeDialog('deleteVmDialog');
+  try {
+    const data = await apiFetch(`/api/agents/${AGENT_NAME}/vm/${VM_NAME}`, 'DELETE');
+    showInlineAlert(alert, 'warning', `Delete job queued (job_id: ${data.job_id || '?'})`);
+    if (data.job_id) {
+      setTimeout(() => { window.location = `/jobs/${data.job_id}`; }, 1200);
+    }
+  } catch (e) {
+    showInlineAlert(alert, 'danger', e.message || 'Delete failed.');
+  }
+}
+</script>
+{% endblock %}

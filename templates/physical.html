@@ -1,0 +1,136 @@
+{% extends "base.html" %}
+{% block title %}Physical{% endblock %}
+{% block topbar_title %}<i class="bi bi-server me-2"></i>Physical{% endblock %}
+
+{% block content %}
+<div class="page-intro">
+  <div>
+    <h1>Physical infrastructure</h1>
+  </div>
+  <div class="metric-grid" style="min-width:min(28rem, 100%);">
+    <article class="metric-card">
+      <div class="metric-icon"><i class="bi bi-hdd-network"></i></div>
+      <div class="metric-label">Agents</div>
+      <div class="metric-value">{{ agents | length }}</div>
+    </article>
+    <article class="metric-card">
+      <div class="metric-icon"><i class="bi bi-broadcast-pin"></i></div>
+      <div class="metric-label">Reachable</div>
+      <div class="metric-value">{{ agents | selectattr('reachable') | list | length }}</div>
+    </article>
+    <article class="metric-card">
+      <div class="metric-icon"><i class="bi bi-pc-display-horizontal"></i></div>
+      <div class="metric-label">VMs</div>
+      <div class="metric-value">
+        {{ agents | sum(attribute='node.vms_total', start=0) }}
+      </div>
+    </article>
+  </div>
+</div>
+
+<article class="panel">
+  {% if not agents %}
+  <article class="empty-state">
+    <div class="empty-icon"><i class="bi bi-hdd-network"></i></div>
+    <h3>No agents registered</h3>
+    <p>
+      The dashboard does not know about any hypervisors yet.
+      {% if user.role == 'admin' %}Visit <a href="/agents">Agents</a> to register your first one.{% endif %}
+    </p>
+  </article>
+  {% else %}
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Server</th>
+          <th>Status</th>
+          <th>CPU</th>
+          <th style="min-width:14rem;">Memory</th>
+          <th style="min-width:14rem;">Disk</th>
+          <th>VMs</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for agent in agents %}
+        {% set node = agent.node %}
+        <tr>
+
+          {# Server name #}
+          <td><strong>{{ agent.name }}</strong></td>
+
+          {# Reachability #}
+          <td>
+            {% if agent.reachable %}
+            <span class="status-pill status-running"><i class="bi bi-check-circle"></i>Reachable</span>
+            {% else %}
+            <span class="status-pill status-failed"><i class="bi bi-x-octagon"></i>Unreachable</span>
+            {% endif %}
+          </td>
+
+          {# CPU #}
+          <td>
+            {% if node.cpu_total %}
+            <span class="fw-semibold">{{ node.cpu_total }} cores</span>
+            {% if node.cpu_model %}
+            <div class="muted small" style="margin-top:0.15rem; max-width:18rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;" title="{{ node.cpu_model }}">{{ node.cpu_model }}</div>
+            {% endif %}
+            {% else %}—{% endif %}
+          </td>
+
+          {# Memory #}
+          <td>
+            {% if node.ram_used is not none and node.ram_total %}
+            <div class="res-row">
+              <span>{{ node.ram_used }} / {{ node.ram_total }} GB</span>
+              <span class="muted small">{{ node.ram_pct }}%</span>
+            </div>
+            <progress value="{{ node.ram_pct }}" max="100"
+              class="{% if node.ram_pct > 85 %}progress-danger{% elif node.ram_pct > 65 %}progress-warn{% endif %}"></progress>
+            {% else %}—{% endif %}
+          </td>
+
+          {# Disk #}
+          <td>
+            {% if node.disk_used is not none and node.disk_total %}
+            <div class="res-row">
+              <span>{{ node.disk_used }} / {{ node.disk_total }} GB</span>
+              <span class="muted small">{{ node.disk_pct }}%</span>
+            </div>
+            <progress value="{{ node.disk_pct }}" max="100"
+              class="{% if node.disk_pct > 85 %}progress-danger{% elif node.disk_pct > 65 %}progress-warn{% endif %}"></progress>
+            {% else %}—{% endif %}
+          </td>
+
+          {# VMs #}
+          <td>
+            {% if agent.reachable %}
+            <span class="fw-semibold">{{ node.vms_running }}</span>
+            <span class="muted small"> running</span>
+            {% else %}—{% endif %}
+          </td>
+
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+</article>
+{% endblock %}
+
+{% block head %}
+<style>
+  .res-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 0.5rem;
+    margin-bottom: 0.3rem;
+    font-size: 0.88rem;
+  }
+  .fw-semibold { font-weight: 600; }
+  progress.progress-warn  { accent-color: #d97706; }
+  progress.progress-danger { accent-color: #dc2626; }
+</style>
+{% endblock %}

@@ -1,0 +1,89 @@
+{% set reachable = agent.get('reachable', False) %}
+{% set stats = agent.get('stats', {}) %}
+{% set vms = agent.get('vms', []) %}
+
+<article class="panel {% if not reachable %}danger-surface{% endif %}">
+  <div class="panel-header">
+    <div>
+      <h2 class="panel-title" {% if agent.get('url') %}title="{{ agent.get('url') }}"{% endif %}>
+        <i class="bi bi-server"></i>{{ agent.name }}
+      </h2>
+    </div>
+    <div class="actions">
+      {% if reachable and user.role in ('admin', 'operator') %}
+      <button type="button" class="mini-action" onclick="openCreateVmModal('{{ agent.name }}')">
+        <i class="bi bi-plus-square me-1"></i>Create VM
+      </button>
+      {% endif %}
+      {% if reachable %}
+      <span class="status-pill status-running"><i class="bi bi-check-circle"></i>Reachable</span>
+      {% else %}
+      <span class="status-pill status-failed"><i class="bi bi-x-octagon"></i>Unreachable</span>
+      {% endif %}
+      <span class="soft-pill"><i class="bi bi-pc-display-horizontal"></i>{{ vms | length }} VM{{ '' if vms | length == 1 else 's' }}</span>
+      {% set last_seen = agent.get('last_seen') or agent.get('lastSeen') %}
+      {% if not reachable and last_seen %}
+      <span class="soft-pill"><i class="bi bi-clock-history"></i>Last seen {{ last_seen }}</span>
+      {% endif %}
+    </div>
+  </div>
+
+  {% if reachable and stats %}
+  <div class="metric-grid" style="margin-bottom:1rem;">
+    {% if stats.get('cpu_usage') is not none %}
+    <article class="metric-card">
+      <div class="metric-label">CPU</div>
+      <div class="metric-value">{{ stats.cpu_usage }}%</div>
+      <progress value="{{ stats.cpu_usage }}" max="100"></progress>
+    </article>
+    {% endif %}
+    {% if stats.get('ram_used') is not none and stats.get('ram_total') is not none %}
+    {% set ram_pct = ((stats.ram_used / stats.ram_total) * 100) | int %}
+    <article class="metric-card">
+      <div class="metric-label">RAM</div>
+      <div class="metric-value">{{ stats.ram_used }} / {{ stats.ram_total }} GB</div>
+      <progress value="{{ ram_pct }}" max="100"></progress>
+    </article>
+    {% endif %}
+    {% if stats.get('disk_used') is not none and stats.get('disk_total') is not none %}
+    {% set disk_pct = ((stats.disk_used / stats.disk_total) * 100) | int %}
+    <article class="metric-card">
+      <div class="metric-label">Storage</div>
+      <div class="metric-value">{{ stats.disk_used }} / {{ stats.disk_total }} GB</div>
+      <progress value="{{ disk_pct }}" max="100"></progress>
+    </article>
+    {% endif %}
+  </div>
+  {% endif %}
+
+  {% if vms %}
+  <div class="panel-header" style="margin-top:1rem;">
+    <h3 class="panel-title"><i class="bi bi-pc-display-horizontal"></i>VM inventory</h3>
+    <span class="soft-pill">{{ vms | length }}</span>
+  </div>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>State</th>
+          <th>vCPU</th>
+          <th>RAM</th>
+          <th class="right">Open</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for vm in vms %}
+        {% include 'partials/vm_row.html' %}
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% elif reachable %}
+  <article class="empty-state">
+    <div class="empty-icon"><i class="bi bi-inboxes"></i></div>
+    <h3>No VMs reported</h3>
+    <p>This agent is reachable but currently has no VM inventory.</p>
+  </article>
+  {% endif %}
+</article>

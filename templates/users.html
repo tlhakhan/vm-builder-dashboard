@@ -1,0 +1,276 @@
+{% extends "base.html" %}
+{% block title %}Users{% endblock %}
+{% block topbar_title %}<i class="bi bi-people me-2"></i>Users{% endblock %}
+
+{% block topbar_actions %}
+<button type="button" onclick="openDialog('createUserDialog')"><i class="bi bi-person-plus me-1"></i>Create user</button>
+{% endblock %}
+
+{% block content %}
+<article id="usersAlert" class="flash hidden"></article>
+
+<div class="page-intro">
+  <div>
+    <h1>User access</h1>
+  </div>
+  <div class="metric-grid" style="min-width:min(24rem, 100%);">
+    <article class="metric-card">
+      <div class="metric-icon"><i class="bi bi-person-check"></i></div>
+      <div class="metric-label">Active</div>
+      <div class="metric-value">{{ active_users | length }}</div>
+    </article>
+    <article class="metric-card">
+      <div class="metric-icon"><i class="bi bi-hourglass-split"></i></div>
+      <div class="metric-label">Pending</div>
+      <div class="metric-value">{{ pending_users | length }}</div>
+    </article>
+  </div>
+</div>
+
+<div class="tabs" role="tablist">
+  <button type="button" class="secondary tab-button active" data-tab-target="activePane">
+    <i class="bi bi-person-check me-1"></i>Active <span class="soft-pill">{{ active_users | length }}</span>
+  </button>
+  <button type="button" class="secondary tab-button" data-tab-target="pendingPane">
+    <i class="bi bi-hourglass-split me-1"></i>Pending
+    {% if pending_users %}<span class="soft-pill">{{ pending_users | length }}</span>{% endif %}
+  </button>
+</div>
+
+<section id="activePane" class="tab-panel">
+  <article class="panel">
+    {% if active_users %}
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Username</th>
+            <th>Role</th>
+            <th>Created</th>
+            <th class="right">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for u in active_users %}
+          <tr>
+            <td>
+              <strong>{{ u.username }}</strong>
+              {% if u.id == user.user_id %}<span class="soft-pill">you</span>{% endif %}
+            </td>
+            <td><span class="role-pill role-{{ u.role if u.role in ('admin','operator','viewer') else 'viewer' }}">{{ u.role }}</span></td>
+            <td class="muted small">{{ u.created_at }}</td>
+            <td class="right">
+              <div class="actions" style="justify-content:flex-end;">
+                <button type="button" class="btn-ghost-warning" onclick="openEditRole({{ u.id }}, '{{ u.role }}')">
+                  <i class="bi bi-pencil me-1"></i>Edit role
+                </button>
+                {% if u.id != user.user_id %}
+                <button type="button" class="btn-ghost-danger" onclick="deactivateUser({{ u.id }}, '{{ u.username }}')">
+                  <i class="bi bi-person-slash me-1"></i>Deactivate
+                </button>
+                {% endif %}
+              </div>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <article class="empty-state">
+      <div class="empty-icon"><i class="bi bi-people"></i></div>
+      <h3>No active users</h3>
+      <p>Create a user above or approve a pending request to grant access.</p>
+    </article>
+    {% endif %}
+  </article>
+</section>
+
+<section id="pendingPane" class="tab-panel" hidden>
+  <article class="panel">
+    {% if pending_users %}
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Username</th>
+            <th>Requested</th>
+            <th class="right">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for u in pending_users %}
+          <tr>
+            <td><strong>{{ u.username }}</strong></td>
+            <td class="muted small">{{ u.created_at }}</td>
+            <td class="right">
+              <div class="actions" style="justify-content:flex-end;">
+                <button type="button" onclick="openApproveModal({{ u.id }}, '{{ u.username }}')">
+                  <i class="bi bi-check-lg me-1"></i>Approve
+                </button>
+                <button type="button" class="btn-ghost-danger" onclick="rejectUser({{ u.id }}, '{{ u.username }}')">
+                  <i class="bi bi-x-lg me-1"></i>Reject
+                </button>
+              </div>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <article class="empty-state">
+      <div class="empty-icon"><i class="bi bi-person-lines-fill"></i></div>
+      <h3>No pending requests</h3>
+      <p>New self-signup requests will appear here for approval.</p>
+    </article>
+    {% endif %}
+  </article>
+</section>
+
+<dialog id="approveDialog">
+  <article style="margin:0;">
+    <div class="dialog-header">
+      <h3 class="dialog-title"><i class="bi bi-check2-circle me-1"></i>Approve user</h3>
+      <button type="button" class="dialog-close" onclick="closeDialog('approveDialog')"><i class="bi bi-x-lg"></i></button>
+    </div>
+    <p>Approving: <strong id="approveUsername"></strong></p>
+    <input type="hidden" id="approveUserId">
+    <label for="approveRole">Role</label>
+    <select id="approveRole">
+      <option value="viewer" selected>viewer</option>
+      <option value="operator">operator</option>
+      <option value="admin">admin</option>
+    </select>
+    <div class="dialog-footer">
+      <button type="button" class="secondary" onclick="closeDialog('approveDialog')">Cancel</button>
+      <button type="button" onclick="approveUser()"><i class="bi bi-check-lg me-1"></i>Approve</button>
+    </div>
+  </article>
+</dialog>
+
+<dialog id="editRoleDialog">
+  <article style="margin:0;">
+    <div class="dialog-header">
+      <h3 class="dialog-title"><i class="bi bi-pencil-square me-1"></i>Edit role</h3>
+      <button type="button" class="dialog-close" onclick="closeDialog('editRoleDialog')"><i class="bi bi-x-lg"></i></button>
+    </div>
+    <input type="hidden" id="editRoleUserId">
+    <label for="editRoleSelect">Role</label>
+    <select id="editRoleSelect">
+      <option value="viewer">viewer</option>
+      <option value="operator">operator</option>
+      <option value="admin">admin</option>
+    </select>
+    <div class="dialog-footer">
+      <button type="button" class="secondary" onclick="closeDialog('editRoleDialog')">Cancel</button>
+      <button type="button" onclick="saveRole()"><i class="bi bi-check2 me-1"></i>Save</button>
+    </div>
+  </article>
+</dialog>
+
+<dialog id="createUserDialog">
+  <article style="margin:0;">
+    <div class="dialog-header">
+      <h3 class="dialog-title"><i class="bi bi-person-plus me-1"></i>Create user</h3>
+      <button type="button" class="dialog-close" onclick="closeDialog('createUserDialog')"><i class="bi bi-x-lg"></i></button>
+    </div>
+    <label for="newUsername">Username</label>
+    <input type="text" id="newUsername" autocomplete="off">
+    <label for="newPassword">Password</label>
+    <input type="password" id="newPassword" autocomplete="new-password">
+    <label for="newRole">Role</label>
+    <select id="newRole">
+      <option value="viewer">viewer</option>
+      <option value="operator">operator</option>
+      <option value="admin">admin</option>
+    </select>
+    <div class="dialog-footer">
+      <button type="button" class="secondary" onclick="closeDialog('createUserDialog')">Cancel</button>
+      <button type="button" onclick="createUser()"><i class="bi bi-person-plus me-1"></i>Create</button>
+    </div>
+  </article>
+</dialog>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const usersAlert = document.getElementById('usersAlert');
+
+setupTabs();
+
+function openApproveModal(userId, username) {
+  document.getElementById('approveUserId').value = userId;
+  document.getElementById('approveUsername').textContent = username;
+  document.getElementById('approveRole').value = 'viewer';
+  openDialog('approveDialog');
+}
+
+async function approveUser() {
+  const userId = document.getElementById('approveUserId').value;
+  const role = document.getElementById('approveRole').value;
+  closeDialog('approveDialog');
+  try {
+    await apiFetch(`/api/users/${userId}/approve`, 'POST', { role });
+    location.reload();
+  } catch (e) {
+    showInlineAlert(usersAlert, 'danger', e.message || 'Failed to approve.');
+  }
+}
+
+async function rejectUser(userId, username) {
+  if (!confirm(`Reject and delete request from "${username}"?`)) return;
+  try {
+    await apiFetch(`/api/users/${userId}/reject`, 'POST');
+    location.reload();
+  } catch (e) {
+    showInlineAlert(usersAlert, 'danger', e.message || 'Failed to reject.');
+  }
+}
+
+function openEditRole(userId, currentRole) {
+  document.getElementById('editRoleUserId').value = userId;
+  document.getElementById('editRoleSelect').value = currentRole;
+  openDialog('editRoleDialog');
+}
+
+async function saveRole() {
+  const userId = document.getElementById('editRoleUserId').value;
+  const role = document.getElementById('editRoleSelect').value;
+  closeDialog('editRoleDialog');
+  try {
+    await apiFetch(`/api/users/${userId}/role`, 'PATCH', { role });
+    location.reload();
+  } catch (e) {
+    showInlineAlert(usersAlert, 'danger', e.message || 'Failed to update role.');
+  }
+}
+
+async function deactivateUser(userId, username) {
+  if (!confirm(`Deactivate user "${username}"?`)) return;
+  try {
+    await apiFetch(`/api/users/${userId}/deactivate`, 'POST');
+    location.reload();
+  } catch (e) {
+    showInlineAlert(usersAlert, 'danger', e.message || 'Failed to deactivate.');
+  }
+}
+
+async function createUser() {
+  const username = document.getElementById('newUsername').value.trim();
+  const password = document.getElementById('newPassword').value;
+  const role = document.getElementById('newRole').value;
+  if (!username || !password) {
+    showInlineAlert(usersAlert, 'warning', 'Username and password are required.');
+    return;
+  }
+  closeDialog('createUserDialog');
+  try {
+    await apiFetch('/api/users', 'POST', { username, password, role });
+    location.reload();
+  } catch (e) {
+    showInlineAlert(usersAlert, 'danger', e.message || 'Failed to create user.');
+  }
+}
+</script>
+{% endblock %}
