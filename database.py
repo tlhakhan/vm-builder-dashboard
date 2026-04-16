@@ -32,17 +32,23 @@ async def init_db():
                 created_at  TEXT DEFAULT (datetime('now'))
             );
 
-            CREATE TABLE IF NOT EXISTS jobs (
+            CREATE TABLE IF NOT EXISTS operations (
                 id          TEXT PRIMARY KEY,
                 agent_name  TEXT NOT NULL,
                 vm_name     TEXT NOT NULL,
                 action      TEXT NOT NULL,
-                status      TEXT NOT NULL DEFAULT 'pending',
                 log         TEXT,
+                created_at  TEXT DEFAULT (datetime('now'))
+            );
+
+            CREATE TABLE IF NOT EXISTS agents (
+                name        TEXT PRIMARY KEY,
+                url         TEXT NOT NULL,
                 created_at  TEXT DEFAULT (datetime('now')),
                 updated_at  TEXT DEFAULT (datetime('now'))
             );
         """)
+        await db.commit()
 
 
 # ---------------------------------------------------------------------------
@@ -165,34 +171,32 @@ async def delete_session(token: str):
 
 
 # ---------------------------------------------------------------------------
-# Job helpers
+# Operation helpers
 # ---------------------------------------------------------------------------
 
-async def upsert_job(job_id: str, agent_name: str, vm_name: str, action: str,
-                     status: str = "pending", log: str = None):
+async def upsert_operation(operation_id: str, agent_name: str, vm_name: str, action: str,
+                           log: str = None):
     async with _connect() as db:
         await db.execute(
-            """INSERT INTO jobs (id, agent_name, vm_name, action, status, log)
-               VALUES (?, ?, ?, ?, ?, ?)
+            """INSERT INTO operations (id, agent_name, vm_name, action, log)
+               VALUES (?, ?, ?, ?, ?)
                ON CONFLICT(id) DO UPDATE SET
-                   status     = excluded.status,
-                   log        = excluded.log,
-                   updated_at = datetime('now')""",
-            (job_id, agent_name, vm_name, action, status, log),
+                   log = excluded.log""",
+            (operation_id, agent_name, vm_name, action, log),
         )
         await db.commit()
 
 
-async def get_job(job_id: str):
+async def get_operation(operation_id: str):
     async with _connect() as db:
         cursor = await db.execute(
-            "SELECT * FROM jobs WHERE id = ?", (job_id,)
+            "SELECT * FROM operations WHERE id = ?", (operation_id,)
         )
         return await cursor.fetchone()
 
 
-async def list_jobs(agent_name: str = None, vm_name: str = None,
-                    action: str = None, status: str = None):
+async def list_operations(agent_name: str = None, vm_name: str = None,
+                          action: str = None):
     clauses, params = [], []
     if agent_name:
         clauses.append("agent_name = ?"); params.append(agent_name)
@@ -200,21 +204,63 @@ async def list_jobs(agent_name: str = None, vm_name: str = None,
         clauses.append("vm_name = ?");    params.append(vm_name)
     if action:
         clauses.append("action = ?");     params.append(action)
-    if status:
-        clauses.append("status = ?");     params.append(status)
     where = ("WHERE " + " AND ".join(clauses)) if clauses else ""
     async with _connect() as db:
         cursor = await db.execute(
-            f"SELECT * FROM jobs {where} ORDER BY created_at DESC", params
+            f"SELECT * FROM operations {where} ORDER BY created_at DESC", params
         )
         return await cursor.fetchall()
 
 
-async def list_jobs_for_vm(agent_name: str, vm_name: str):
+async def list_operations_for_vm(agent_name: str, vm_name: str):
     async with _connect() as db:
         cursor = await db.execute(
-            "SELECT * FROM jobs WHERE agent_name = ? AND vm_name = ? "
+            "SELECT * FROM operations WHERE agent_name = ? AND vm_name = ? "
             "ORDER BY created_at DESC",
             (agent_name, vm_name),
         )
         return await cursor.fetchall()
+
+async def create_operation(operation_id: str, agent_name: str, vm_name: str, action: str,
+                           log: str = None):
+    await upsert_operation(operation_id, agent_name, vm_name, action, log=log)
+
+
+# ---------------------------------------------------------------------------
+# Agent registry helpers
+# ---------------------------------------------------------------------------
+
+async def list_agents():
+    async with _connect() as db:
+        cursor = await db.execute(
+            "SELECT * FROM agents ORDER BY lower(name), created_at DESC"
+        )
+        return await cursor.fetchall()
+
+
+async def get_agent(name: str):
+    async with _connect() as db:
+        cursor = await db.execute(
+            "SELECT * FROM agents WHERE name = ?", (name,)
+        )
+        return await cursor.fetchone()
+
+
+async def upsert_agent(name: str, url: str):
+    async with _connect() as db:
+        await db.execute(
+            """INSERT INTO agents (name, url)
+               VALUES (?, ?)
+               ON CONFLICT(name) DO UPDATE SET
+                   url = excluded.url,
+                   updated_at = datetime('now')""",
+            (name, url),
+        )
+        await db.commit()
+
+
+async def delete_agent(name: str) -> bool:
+    async with _connect() as db:
+        cursor = await db.execute("DELETE FROM agents WHERE name = ?", (name,))
+        await db.commit()
+        return cursor.rowcount > 0

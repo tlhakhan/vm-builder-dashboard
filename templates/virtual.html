@@ -1,35 +1,32 @@
 {% extends "base.html" %}
-{% block title %}Virtual{% endblock %}
-{% block topbar_title %}<i class="bi bi-pc-display-horizontal me-2"></i>Virtual{% endblock %}
-
-{% block topbar_actions %}
-{% if user.role in ('admin', 'operator') %}
-<button type="button" onclick="openDialog('createVmDialog')"><i class="bi bi-plus-lg me-1"></i>Create VM</button>
-{% endif %}
-{% endblock %}
+{% block title %}Virtual Machines{% endblock %}
+{% block topbar_title %}<i class="bi bi-pc-display-horizontal me-2"></i>Virtual Machines{% endblock %}
 
 {% block content %}
 <article id="virtualAlert" class="flash hidden"></article>
 
-<div class="page-intro">
-  <div>
-    <h1>Virtual machines</h1>
-  </div>
-  <div class="metric-grid" style="min-width:min(24rem, 100%);">
-    <article class="metric-card">
-      <div class="metric-icon"><i class="bi bi-pc-display-horizontal"></i></div>
-      <div class="metric-label">Total</div>
-      <div class="metric-value">{{ total }}</div>
-    </article>
-    <article class="metric-card">
-      <div class="metric-icon"><i class="bi bi-play-circle"></i></div>
-      <div class="metric-label">Running</div>
-      <div class="metric-value">{{ running }}</div>
-    </article>
-  </div>
-</div>
-
 <article class="panel">
+  <div class="panel-header">
+    <h2 class="panel-title"><i class="bi bi-pc-display-horizontal"></i>Virtual Machine Inventory</h2>
+    {% if user.role in ('admin', 'operator') %}
+    <div class="action-menu-shell virtual-actions-shell">
+      <button
+        type="button"
+        class="action-menu-toggle virtual-actions-toggle"
+        data-virtual-actions-toggle
+        aria-label="Open virtual machine actions"
+        aria-expanded="false"
+      >
+        <i class="bi bi-three-dots-vertical"></i>
+      </button>
+      <div class="action-menu virtual-actions-menu" data-virtual-actions-menu>
+        <button type="button" class="action-menu-btn virtual-action-menu-btn" onclick="openDialog('createVmDialog')">
+          <i class="bi bi-plus-lg"></i>Create VM
+        </button>
+      </div>
+    </div>
+    {% endif %}
+  </div>
   {% if not vms %}
   <article class="empty-state">
     <div class="empty-icon"><i class="bi bi-pc-display-horizontal"></i></div>
@@ -37,7 +34,7 @@
     <p>No VMs were returned from any registered agent.</p>
   </article>
   {% else %}
-  <div class="table-wrap">
+  <div class="table-wrap virtual-table">
     <table>
       <thead>
         <tr>
@@ -47,6 +44,9 @@
           <th>vCPU</th>
           <th>RAM</th>
           <th>Disk</th>
+          {% if user.role in ('admin', 'operator') %}
+          <th class="virtual-actions-col">Actions</th>
+          {% endif %}
         </tr>
       </thead>
       <tbody>
@@ -67,19 +67,132 @@
             {% set disk = vm.get('disk_gb') %}
             {% if disk %}{{ disk }} GB{% else %}—{% endif %}
           </td>
+          {% if user.role in ('admin', 'operator') %}
+          <td class="virtual-actions-cell">
+            <div class="action-menu-shell virtual-actions-shell">
+              <button
+                type="button"
+                class="action-menu-toggle virtual-actions-toggle"
+                data-virtual-actions-toggle
+                aria-label="Open VM actions"
+                aria-expanded="false"
+              >
+                <i class="bi bi-three-dots-vertical"></i>
+              </button>
+              <div class="action-menu virtual-actions-menu" data-virtual-actions-menu>
+                <button
+                  type="button"
+                  class="action-menu-btn action-menu-success virtual-action-menu-btn virtual-action-menu-start{% if vm.get('state', '') | lower == 'running' %} action-menu-disabled virtual-action-menu-disabled{% endif %}"
+                  data-vm-action="start"
+                  data-agent-name="{{ vm.agent_name | e }}"
+                  data-vm-name="{{ vm.name | e }}"
+                  {% if vm.get('state', '') | lower == 'running' %}disabled{% endif %}
+                >
+                  <i class="bi bi-play-fill"></i>Start
+                </button>
+                <button
+                  type="button"
+                  class="action-menu-btn action-menu-warning virtual-action-menu-btn virtual-action-menu-shutdown{% if vm.get('state', '') | lower != 'running' %} action-menu-disabled virtual-action-menu-disabled{% endif %}"
+                  data-vm-action="shutdown"
+                  data-agent-name="{{ vm.agent_name | e }}"
+                  data-vm-name="{{ vm.name | e }}"
+                  {% if vm.get('state', '') | lower != 'running' %}disabled{% endif %}
+                >
+                  <i class="bi bi-stop-fill"></i>Shutdown
+                </button>
+              </div>
+            </div>
+          </td>
+          {% endif %}
         </tr>
         {% endfor %}
       </tbody>
     </table>
+  </div>
+
+  <div class="virtual-cards">
+    {% for vm in vms %}
+    {% set state = vm.get('state', 'unknown') | lower %}
+    <article class="virtual-card">
+      <div class="virtual-card-head">
+        <div class="virtual-card-heading">
+          <h2 class="virtual-card-title">
+            <a href="/vm/{{ vm.agent_name }}/{{ vm.name }}">{{ vm.name }}</a>
+          </h2>
+          <div class="muted small">{{ vm.agent_name }}</div>
+        </div>
+        <div class="virtual-card-head-side">
+          <span class="status-pill status-{{ state if state in ('running','stopped','paused') else 'unknown' }}">{{ state }}</span>
+          {% if user.role in ('admin', 'operator') %}
+          <div class="action-menu-shell virtual-actions-shell">
+            <button
+              type="button"
+              class="action-menu-toggle virtual-actions-toggle"
+              data-virtual-actions-toggle
+              aria-label="Open VM actions"
+              aria-expanded="false"
+            >
+              <i class="bi bi-three-dots-vertical"></i>
+            </button>
+            <div class="action-menu virtual-actions-menu" data-virtual-actions-menu>
+              <button
+                type="button"
+                class="action-menu-btn action-menu-success virtual-action-menu-btn virtual-action-menu-start{% if vm.get('state', '') | lower == 'running' %} action-menu-disabled virtual-action-menu-disabled{% endif %}"
+                data-vm-action="start"
+                data-agent-name="{{ vm.agent_name | e }}"
+                data-vm-name="{{ vm.name | e }}"
+                {% if vm.get('state', '') | lower == 'running' %}disabled{% endif %}
+              >
+                <i class="bi bi-play-fill"></i>Start
+              </button>
+              <button
+                type="button"
+                class="action-menu-btn action-menu-warning virtual-action-menu-btn virtual-action-menu-shutdown{% if vm.get('state', '') | lower != 'running' %} action-menu-disabled virtual-action-menu-disabled{% endif %}"
+                data-vm-action="shutdown"
+                data-agent-name="{{ vm.agent_name | e }}"
+                data-vm-name="{{ vm.name | e }}"
+                {% if vm.get('state', '') | lower != 'running' %}disabled{% endif %}
+              >
+                <i class="bi bi-stop-fill"></i>Shutdown
+              </button>
+            </div>
+          </div>
+          {% endif %}
+        </div>
+      </div>
+      <div class="virtual-card-grid">
+        <div class="virtual-card-item">
+          <div class="virtual-card-label">vCPU</div>
+          <div class="virtual-card-value">{{ vm.get('vcpu') or '—' }}</div>
+        </div>
+        <div class="virtual-card-item">
+          <div class="virtual-card-label">RAM</div>
+          <div class="virtual-card-value">
+            {% set ram = vm.get('ram_mb') %}
+            {% if ram %}
+              {% if ram >= 1024 %}{{ (ram / 1024) | round(1) }} GB{% else %}{{ ram }} MB{% endif %}
+            {% else %}—{% endif %}
+          </div>
+        </div>
+        <div class="virtual-card-item">
+          <div class="virtual-card-label">Disk</div>
+          <div class="virtual-card-value">
+            {% set disk = vm.get('disk_gb') %}
+            {% if disk %}{{ disk }} GB{% else %}—{% endif %}
+          </div>
+        </div>
+      </div>
+    </article>
+    {% endfor %}
   </div>
   {% endif %}
 </article>
 
 {% if user.role in ('admin', 'operator') %}
 <dialog id="createVmDialog">
-  <article style="margin:0;">
-    <div class="dialog-header">
-      <h3 class="dialog-title"><i class="bi bi-plus-square me-1"></i>Create VM</h3>
+  <article class="create-vm-dialog-body" style="margin:0;">
+    <div class="dialog-header create-vm-dialog-header">
+      <h3 class="dialog-title"><i class="bi bi-plus-square me-2"></i>Create VM</h3>
       <button type="button" class="dialog-close" onclick="closeDialog('createVmDialog')"><i class="bi bi-x-lg"></i></button>
     </div>
     <label for="vmAgent">Hypervisor</label>
@@ -119,11 +232,138 @@
     <textarea id="vmAuthorizedKey" rows="3" placeholder="ssh-rsa AAAA..." style="font-family: monospace; font-size: 0.8rem; resize: vertical;"></textarea>
     <div class="dialog-footer">
       <button type="button" class="secondary" onclick="closeDialog('createVmDialog')">Cancel</button>
-      <button type="button" onclick="createVm()"><i class="bi bi-plus-lg me-1"></i>Create</button>
+      <button type="button" id="createVmSubmit" onclick="createVm()"><i class="bi bi-plus-lg me-1"></i><span>Create</span></button>
     </div>
   </article>
 </dialog>
 {% endif %}
+{% endblock %}
+
+{% block head %}
+<style>
+  .virtual-cards {
+    display: none;
+  }
+  .virtual-card {
+    display: grid;
+    gap: 0.9rem;
+    padding: 1rem;
+    border: 1px solid var(--app-border);
+    border-radius: 1rem;
+    background: #fff;
+    box-shadow: 0 4px 16px rgba(15, 23, 42, 0.06);
+  }
+  .virtual-actions-col {
+    width: 1%;
+    white-space: nowrap;
+  }
+  .virtual-actions-cell {
+    text-align: right;
+  }
+  .virtual-card-head {
+    display: flex;
+    justify-content: space-between;
+    gap: 0.75rem;
+    align-items: flex-start;
+  }
+  .virtual-card-heading {
+    min-width: 0;
+  }
+  .virtual-card-head-side {
+    display: flex;
+    align-items: center;
+    gap: 0.55rem;
+    flex-shrink: 0;
+  }
+  .virtual-card-title {
+    display: flex;
+    align-items: center;
+    margin: 0 0 0.2rem;
+    font-size: 1rem;
+  }
+  .virtual-card-title a {
+    text-decoration: none;
+  }
+  .virtual-card-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0.75rem;
+  }
+  .virtual-card-item {
+    padding: 0.8rem 0.9rem;
+    border-radius: 0.9rem;
+    background: var(--app-panel-alt);
+    border: 1px solid rgba(148, 163, 184, 0.16);
+  }
+  .virtual-card-label {
+    color: var(--app-text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    font-size: 0.68rem;
+  }
+  .virtual-card-value {
+    margin-top: 0.3rem;
+    font-weight: 600;
+    color: #0f172a;
+  }
+  #createVmDialog {
+    max-height: calc(var(--app-viewport-height) - 1rem);
+    border-radius: 0;
+  }
+  .create-vm-dialog-body {
+    max-height: calc(var(--app-viewport-height) - 2rem);
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    box-sizing: border-box;
+    padding-top: 0;
+  }
+  .create-vm-dialog-header {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    margin: 0 0 1rem;
+    padding: 1rem 0 0.85rem;
+    background: #fff;
+    border-bottom: 1px solid var(--app-border);
+  }
+  .spin {
+    display: inline-block;
+    animation: virtual-spin 0.9s linear infinite;
+  }
+  @keyframes virtual-spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+  }
+  @media (min-width: 761px) {
+    .virtual-table {
+      overflow: visible;
+    }
+  }
+  @media (max-width: 760px) {
+    .virtual-table {
+      display: none;
+    }
+    .virtual-cards {
+      display: grid;
+      gap: 0.9rem;
+    }
+    .virtual-card-head,
+    .virtual-card-head-side {
+      align-items: center;
+    }
+  }
+  @media (max-width: 520px) {
+    #createVmDialog {
+      width: min(32rem, calc(100vw - 1rem));
+    }
+    .create-vm-dialog-body {
+      max-height: calc(var(--app-viewport-height) - 1.5rem);
+    }
+    #createVmDialog .metric-grid {
+      grid-template-columns: 1fr !important;
+    }
+  }
+</style>
 {% endblock %}
 
 {% block scripts %}
@@ -132,6 +372,95 @@
 function getImageUrl() {
   return document.getElementById('vmImagePreset').value;
 }
+
+function sleep(ms) {
+  return new Promise((resolve) => window.setTimeout(resolve, ms));
+}
+
+async function waitForVm(agentName, vmName, attempts = 12, delayMs = 1000) {
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    try {
+      await apiFetch(`/api/agents/${encodeURIComponent(agentName)}/vm/${encodeURIComponent(vmName)}`, 'GET');
+      return true;
+    } catch (e) {
+      if (attempt === attempts - 1) {
+        return false;
+      }
+      await sleep(delayMs);
+    }
+  }
+  return false;
+}
+
+function setCreateVmSubmitting(submitting) {
+  const button = document.getElementById('createVmSubmit');
+  if (!button) return;
+  button.disabled = submitting;
+  button.innerHTML = submitting
+    ? '<i class="bi bi-arrow-repeat me-1 spin"></i><span>Creating…</span>'
+    : '<i class="bi bi-plus-lg me-1"></i><span>Create</span>';
+}
+
+let openVirtualMenu = null;
+
+document.querySelectorAll('[data-virtual-actions-toggle]').forEach((toggle) => {
+  toggle.addEventListener('click', (event) => {
+    event.stopPropagation();
+    const shell = toggle.closest('.virtual-actions-shell');
+    const menu = shell ? shell.querySelector('[data-virtual-actions-menu]') : null;
+    if (!menu) return;
+    const willOpen = !menu.classList.contains('is-open');
+    if (openVirtualMenu && openVirtualMenu !== menu) {
+      openVirtualMenu.classList.remove('is-open');
+      const openToggle = openVirtualMenu.parentElement?.querySelector('[data-virtual-actions-toggle]');
+      openToggle?.setAttribute('aria-expanded', 'false');
+    }
+    menu.classList.toggle('is-open', willOpen);
+    toggle.setAttribute('aria-expanded', willOpen ? 'true' : 'false');
+    openVirtualMenu = willOpen ? menu : null;
+  });
+});
+
+document.addEventListener('click', (event) => {
+  if (!openVirtualMenu) return;
+  const shell = openVirtualMenu.closest('.virtual-actions-shell');
+  if (shell && !shell.contains(event.target)) {
+    openVirtualMenu.classList.remove('is-open');
+    shell.querySelector('[data-virtual-actions-toggle]')?.setAttribute('aria-expanded', 'false');
+    openVirtualMenu = null;
+  }
+});
+
+async function vmAction(agentName, vmName, action) {
+  const alert = document.getElementById('virtualAlert');
+  try {
+    await apiFetch(`/api/agents/${encodeURIComponent(agentName)}/vm/${encodeURIComponent(vmName)}/${action}`, 'POST');
+    showInlineAlert(alert, 'success', `${action} initiated for ${vmName}.`);
+    setTimeout(() => location.reload(), 1500);
+  } catch (e) {
+    showInlineAlert(alert, 'danger', e.message || `Failed to ${action} ${vmName}.`);
+  }
+}
+
+document.querySelectorAll('[data-vm-action]').forEach((button) => {
+  button.addEventListener('click', async (event) => {
+    event.stopPropagation();
+    const action = button.dataset.vmAction;
+    const agentName = button.dataset.agentName;
+    const vmName = button.dataset.vmName;
+    const shell = button.closest('.virtual-actions-shell');
+    const menu = shell ? shell.querySelector('[data-virtual-actions-menu]') : null;
+    const toggle = shell ? shell.querySelector('[data-virtual-actions-toggle]') : null;
+    if (menu) {
+      menu.classList.remove('is-open');
+    }
+    if (toggle) {
+      toggle.setAttribute('aria-expanded', 'false');
+    }
+    openVirtualMenu = null;
+    await vmAction(agentName, vmName, action);
+  });
+});
 
 async function createVm() {
   const alert = document.getElementById('virtualAlert');
@@ -153,18 +482,26 @@ async function createVm() {
     return;
   }
 
-  closeDialog('createVmDialog');
+  setCreateVmSubmitting(true);
   try {
     const data = await apiFetch(`/api/agents/${encodeURIComponent(agentName)}/vm/create`, 'POST', {
       name, cpu, memory_gib, disks_gib: [disk_gib], cloud_image_url,
       automation_user, automation_user_pubkey
     });
-    showInlineAlert(alert, 'success', `Create job queued (job_id: ${data.job_id || '?'})`);
-    if (data.job_id) {
-      setTimeout(() => { window.location = `/jobs/${data.job_id}`; }, 1200);
+    const createdName = data.name || name;
+    showInlineAlert(alert, 'success', `VM ${createdName} is being prepared. Opening it when it becomes available…`);
+    const ready = await waitForVm(agentName, createdName);
+    closeDialog('createVmDialog');
+    if (ready) {
+      window.location = `/vm/${encodeURIComponent(agentName)}/${encodeURIComponent(createdName)}`;
+      return;
     }
+    showInlineAlert(alert, 'warning', `VM ${createdName} was created, but it is taking longer than expected to appear. Refresh in a few seconds if needed.`);
   } catch (e) {
+    closeDialog('createVmDialog');
     showInlineAlert(alert, 'danger', e.message || 'Failed to create VM.');
+  } finally {
+    setCreateVmSubmitting(false);
   }
 }
 </script>

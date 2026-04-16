@@ -3,38 +3,43 @@
 {% block title %}{{ vm_display }}{% endblock %}
 {% block topbar_title %}<i class="bi bi-pc-display-horizontal me-2"></i>{{ vm_name }}{% endblock %}
 
-{% block topbar_actions %}
-{% if user.role in ('admin', 'operator') and vm %}
-<button type="button" class="btn-start{% if vm.get('state', '') | lower == 'running' %} btn-start-disabled{% endif %}" {% if vm.get('state', '') | lower == 'running' %}disabled{% endif %} onclick="vmAction('start')">
-  <i class="bi bi-play-fill me-1"></i>Start
-</button>
-<button type="button" class="btn-shutdown" {% if vm.get('state', '') | lower != 'running' %}disabled{% endif %} onclick="vmAction('shutdown')">
-  <i class="bi bi-stop-fill me-1"></i>Shutdown
-</button>
-{% endif %}
-{% endblock %}
-
 {% block content %}
 <article id="actionAlert" class="flash hidden" style="margin-bottom:1rem;"></article>
 
-{% if not vm %}
-<article class="empty-state">
-  <div class="empty-icon"><i class="bi bi-exclamation-diamond"></i></div>
-  <h3>VM details unavailable</h3>
-  <p>The selected VM could not be loaded right now. The agent may be unreachable or the VM may no longer exist.</p>
-</article>
-{% else %}
-{% set state = vm.get('state', 'unknown') | lower %}
-
-<div class="split" style="align-items:start;">
+<div class="split vm-detail-split" style="align-items:start;">
 
   {# Left — VM specs #}
   <article class="panel">
+    {% if not vm %}
+    <article class="empty-state" style="box-shadow:none; border:0; padding:0;">
+      <div class="empty-icon"><i class="bi bi-exclamation-diamond"></i></div>
+      <h3>VM details unavailable</h3>
+      <p>The selected VM could not be loaded right now. The agent may be unreachable or the VM may no longer exist.</p>
+    </article>
+    {% else %}
+    {% set state = vm.get('state', 'unknown') | lower %}
     <div class="panel-header">
       <h2 class="panel-title">
         <i class="bi bi-pc-display-horizontal"></i>{{ vm_name }}
       </h2>
-      <span class="status-pill status-{{ state if state in ('running','stopped','paused') else 'unknown' }}">{{ state }}</span>
+      <div class="vm-header-meta">
+        <span class="status-pill status-{{ state if state in ('running','stopped','paused') else 'unknown' }}">{{ state }}</span>
+        {% if user.role in ('admin', 'operator') %}
+        <div class="action-menu-shell vm-actions-shell">
+          <button type="button" class="action-menu-toggle vm-actions-toggle" id="vmActionsToggle" aria-label="Open VM actions" aria-expanded="false">
+            <i class="bi bi-three-dots-vertical"></i>
+          </button>
+          <div class="action-menu vm-actions-menu" id="vmActionsMenu">
+            <button type="button" class="action-menu-btn action-menu-success vm-action-menu-btn vm-action-menu-start{% if vm.get('state', '') | lower == 'running' %} action-menu-disabled vm-action-menu-disabled{% endif %}" {% if vm.get('state', '') | lower == 'running' %}disabled{% endif %} onclick="vmAction('start')">
+              <i class="bi bi-play-fill me-1"></i>Start
+            </button>
+            <button type="button" class="action-menu-btn action-menu-warning vm-action-menu-btn vm-action-menu-shutdown{% if vm.get('state', '') | lower != 'running' %} action-menu-disabled vm-action-menu-disabled{% endif %}" {% if vm.get('state', '') | lower != 'running' %}disabled{% endif %} onclick="vmAction('shutdown')">
+              <i class="bi bi-stop-fill me-1"></i>Shutdown
+            </button>
+          </div>
+        </div>
+        {% endif %}
+      </div>
     </div>
     <table class="spec-table">
       <tbody>
@@ -58,11 +63,26 @@
             {% if disk %}{{ disk }} GB{% else %}—{% endif %}
           </td>
         </tr>
+        <tr>
+          <td class="spec-label">Image</td>
+          <td>
+            {% set image_filename = vm.get('cloud_image_filename') %}
+            {% set image_labels = {
+              'resolute-server-cloudimg-amd64.img': 'Ubuntu 26.04 LTS (Resolute)',
+              'noble-server-cloudimg-amd64.img': 'Ubuntu 24.04 LTS (Noble)',
+              'jammy-server-cloudimg-amd64.img': 'Ubuntu 22.04 LTS (Jammy)',
+              'focal-server-cloudimg-amd64.img': 'Ubuntu 20.04 LTS (Focal)',
+            } %}
+            {% if image_filename %}
+            {{ image_labels.get(image_filename, image_filename) }}
+            {% else %}—{% endif %}
+          </td>
+        </tr>
         {% if vm.get('autostart') is not none %}
         {% set autostart_on = vm.get('autostart') | string | lower in ('enable', 'enabled', 'true', '1', 'yes') %}
         <tr>
           <td class="spec-label">Autostart</td>
-          <td><span class="autostart-badge {{ 'autostart-on' if autostart_on else 'autostart-off' }}">{{ 'true' if autostart_on else 'false' }}</span></td>
+          <td><span class="autostart-pill {{ 'autostart-on' if autostart_on else 'autostart-off' }}">{{ 'true' if autostart_on else 'false' }}</span></td>
         </tr>
         {% endif %}
         <tr>
@@ -71,42 +91,81 @@
         </tr>
       </tbody>
     </table>
-
+    {% endif %}
   </article>
 
-  {# Right — Past jobs #}
+  {# Right — Past operations #}
   <article class="panel">
     <div class="panel-header">
-      <h2 class="panel-title"><i class="bi bi-clock-history"></i>Past jobs</h2>
-      <span class="soft-pill">{{ jobs | length }}</span>
+      <h2 class="panel-title"><i class="bi bi-clock-history"></i>Past operations</h2>
+      <span class="soft-pill">{{ operations | length }}</span>
     </div>
-    {% if jobs %}
-    <div class="table-wrap">
+    {% if operations %}
+    <div class="table-wrap vm-ops-table">
       <table>
         <thead>
           <tr>
             <th>Action</th>
-            <th>Status</th>
-            <th>Updated</th>
-            <th class="right">Open</th>
+            <th>Recorded</th>
+            <th>Output</th>
           </tr>
         </thead>
         <tbody>
-          {% for job in jobs %}
+          {% for operation in operations %}
           <tr>
-            <td>{{ job.action }}</td>
-            <td><span class="status-pill status-{{ job.status if job.status in ('pending','running','done','failed') else 'unknown' }}">{{ job.status }}</span></td>
-            <td class="muted small" data-ts="{{ job.updated_at or job.created_at }}">{{ job.updated_at or job.created_at }}</td>
-            <td class="right"><a href="/jobs/{{ job.id }}" role="button" class="btn-open"><i class="bi bi-box-arrow-up-right"></i></a></td>
+            <td>{{ operation.action }}</td>
+            <td class="muted small" data-ts="{{ operation.created_at }}">{{ operation.created_at }}</td>
+            <td>
+              {% if operation.log %}
+              <button
+                type="button"
+                class="btn-open"
+                data-operation-output
+                data-action="{{ operation.action | e }}"
+                data-created-at="{{ operation.created_at | e }}"
+                data-log="{{ operation.log | e }}"
+              >
+                <i class="bi bi-window-stack me-1"></i>View output
+              </button>
+              {% else %}
+              <span class="muted small">No output captured</span>
+              {% endif %}
+            </td>
           </tr>
           {% endfor %}
         </tbody>
       </table>
     </div>
+    <div class="vm-ops-cards">
+      {% for operation in operations %}
+      <article class="vm-op-card">
+        <div class="vm-op-card-head">
+          <div class="vm-op-card-title">{{ operation.action }}</div>
+          <div class="muted small" data-ts="{{ operation.created_at }}">{{ operation.created_at }}</div>
+        </div>
+        <div>
+          {% if operation.log %}
+          <button
+            type="button"
+            class="btn-open"
+            data-operation-output
+            data-action="{{ operation.action | e }}"
+            data-created-at="{{ operation.created_at | e }}"
+            data-log="{{ operation.log | e }}"
+          >
+            <i class="bi bi-window-stack me-1"></i>View output
+          </button>
+          {% else %}
+          <span class="muted small">No output captured</span>
+          {% endif %}
+        </div>
+      </article>
+      {% endfor %}
+    </div>
     {% else %}
     <article class="empty-state">
       <div class="empty-icon"><i class="bi bi-journal-x"></i></div>
-      <h3>No jobs recorded</h3>
+      <h3>No operations recorded</h3>
     </article>
     {% endif %}
   </article>
@@ -115,17 +174,20 @@
 
 {% if user.role in ('admin', 'operator') %}
 <article class="panel danger-zone" style="margin-top:1.25rem;">
-  <div class="panel-header">
-    <h2 class="panel-title" style="color:var(--app-danger);"><i class="bi bi-exclamation-octagon"></i>Danger zone</h2>
-  </div>
-  <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:0.75rem;">
-    <div>
-      <strong>Delete this VM</strong>
-      <p class="muted small" style="margin:0;">Permanently destroys <strong>{{ vm_name }}</strong> and all its data. This cannot be undone.</p>
+  <button type="button" class="danger-zone-toggle" id="dangerZoneToggle" aria-expanded="false">
+    <span class="danger-zone-title"><i class="bi bi-exclamation-octagon"></i>Danger zone</span>
+    <i class="bi bi-chevron-down danger-zone-chevron" id="dangerZoneChevron"></i>
+  </button>
+  <div class="danger-zone-content hidden" id="dangerZoneContent">
+    <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:0.75rem;">
+      <div>
+        <strong>Delete this VM</strong>
+        <p class="muted small" style="margin:0;">Permanently destroys <strong>{{ vm_name }}</strong> and all its data.<br>This cannot be undone.</p>
+      </div>
+      <button type="button" class="danger-btn" onclick="openDialog('deleteVmDialog')">
+        <i class="bi bi-trash me-1"></i>Delete VM
+      </button>
     </div>
-    <button type="button" class="danger-btn" onclick="openDialog('deleteVmDialog')">
-      <i class="bi bi-trash me-1"></i>Delete VM
-    </button>
   </div>
 </article>
 {% endif %}
@@ -133,40 +195,164 @@
 <dialog id="deleteVmDialog">
   <article style="margin:0;">
     <div class="dialog-header">
-      <h3 class="dialog-title"><i class="bi bi-exclamation-octagon me-1"></i>Delete VM</h3>
+      <h3 class="dialog-title"><i class="bi bi-exclamation-octagon me-2"></i>Delete VM</h3>
       <button type="button" class="dialog-close" onclick="closeDialog('deleteVmDialog')"><i class="bi bi-x-lg"></i></button>
     </div>
     <p>This will permanently destroy <strong>{{ vm_name }}</strong>. Type the VM name to confirm.</p>
     <input type="text" id="deleteConfirmInput" placeholder="{{ vm_name }}" autocomplete="off">
     <div class="dialog-footer">
       <button type="button" class="secondary" onclick="closeDialog('deleteVmDialog')">Cancel</button>
-      <button type="button" id="btnConfirmDelete" class="contrast" disabled onclick="deleteVm()">
+      <button type="button" id="btnConfirmDelete" class="danger-btn" disabled onclick="deleteVm()">
         <i class="bi bi-trash me-1"></i>Delete
       </button>
     </div>
   </article>
 </dialog>
-{% endif %}
+
+<dialog id="operationOutputDialog">
+  <article style="margin:0;">
+    <div class="dialog-header">
+      <div>
+        <h3 class="dialog-title"><i class="bi bi-terminal me-2"></i>Operation output</h3>
+        <div class="muted small" id="operationOutputMeta" style="margin-top:0.2rem;"></div>
+      </div>
+      <button type="button" class="dialog-close" onclick="closeDialog('operationOutputDialog')"><i class="bi bi-x-lg"></i></button>
+    </div>
+    <pre class="log-output log-output-modal" id="operationOutputBody"></pre>
+  </article>
+</dialog>
 {% endblock %}
 
 {% block head %}
 <style>
+  @media (min-width: 761px) {
+    .vm-detail-split {
+      grid-template-columns: minmax(20rem, 24rem) minmax(0, 1fr);
+    }
+  }
+  .vm-ops-cards {
+    display: none;
+  }
+  .vm-header-meta {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.55rem;
+    flex-shrink: 0;
+  }
+  .vm-header-meta .status-pill {
+    font-weight: 500;
+  }
   .spec-table { width: 100%; margin: 0; }
   .spec-table td { padding: 0.45rem 0; border-bottom: 1px solid var(--app-border); }
   .spec-table tbody tr:last-child td { border-bottom: 0; }
   .spec-label { color: var(--app-text-muted); font-size: 0.82rem; width: 7rem; }
-.autostart-badge { display: inline-block; padding: 0.15rem 0.55rem; border-radius: 999px; font-size: 0.78rem; font-weight: 600; }
+  .autostart-pill {
+    display: inline-flex;
+    align-items: center;
+    border-radius: 999px;
+    padding: 0.25rem 0.65rem;
+    font-size: 0.76rem;
+    white-space: nowrap;
+  }
   .autostart-on  { background: #16a34a; color: #fff; }
   .autostart-off { background: #dc2626; color: #fff; }
   .danger-zone { border: 1px solid rgba(220,38,38,0.25); }
-  .danger-zone .panel-header { border-bottom: 1px solid rgba(220,38,38,0.15); }
-  .danger-btn { background: #dc2626; border-color: #dc2626; color: #fff; padding: 0.35rem 0.85rem; font-size: 0.85rem; width: auto; margin: 0; }
+  .danger-zone-toggle {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    width: 100%;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: var(--app-danger);
+    font-size: 1rem;
+  }
+  .danger-zone-title {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-weight: 600;
+  }
+  .danger-zone-chevron {
+    transition: transform 160ms ease;
+  }
+  .danger-zone-chevron.is-open {
+    transform: rotate(180deg);
+  }
+  .danger-zone-content {
+    margin-top: 0.95rem;
+    padding-top: 0.95rem;
+    border-top: 1px solid rgba(220,38,38,0.15);
+  }
+  .danger-zone-content.hidden {
+    display: none;
+  }
+  .danger-btn { background: #dc2626; border-color: #dc2626; color: #fff; }
   .danger-btn:hover { background: #b91c1c; border-color: #b91c1c; }
-  .btn-start { background: #16a34a; border-color: #16a34a; color: #fff; }
-  .btn-start:hover:not(:disabled) { background: #15803d; border-color: #15803d; }
-  .btn-start:disabled, .btn-shutdown:disabled { background: #e2e8f0; border-color: #e2e8f0; color: #94a3b8; opacity: 1; }
-  .btn-shutdown { background: #d97706; border-color: #d97706; color: #fff; }
-  .btn-shutdown:hover:not(:disabled) { background: #b45309; border-color: #b45309; }
+  .danger-btn:disabled {
+    background: #fca5a5;
+    border-color: #fca5a5;
+    color: #fff;
+    cursor: not-allowed;
+    opacity: 1;
+  }
+  .vm-op-card {
+    display: grid;
+    gap: 0.8rem;
+    padding: 0.95rem;
+    border: 1px solid var(--app-border);
+    border-radius: 0.95rem;
+    background: #fff;
+  }
+  .vm-op-card-head {
+    display: flex;
+    justify-content: space-between;
+    gap: 0.75rem;
+    align-items: flex-start;
+  }
+  .vm-op-card-title {
+    font-weight: 600;
+    color: #0f172a;
+    text-transform: capitalize;
+  }
+  .log-output-modal {
+    max-height: min(65vh, 34rem);
+    overflow: auto;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+    border-radius: 1rem;
+  }
+  @media (max-width: 760px) {
+    .vm-ops-table {
+      display: none;
+    }
+    .vm-ops-cards {
+      display: grid;
+      gap: 0.85rem;
+    }
+    .panel-header {
+      align-items: center;
+      flex-wrap: nowrap;
+      gap: 0.75rem;
+    }
+    .panel-header .panel-title {
+      min-width: 0;
+    }
+    .vm-header-meta {
+      margin-left: auto;
+      justify-content: flex-end;
+    }
+    .spec-label {
+      width: 5.5rem;
+    }
+    .danger-zone-content > div {
+      align-items: stretch !important;
+    }
+  }
 </style>
 {% endblock %}
 
@@ -200,6 +386,57 @@ if (confirmInput) {
   });
 }
 
+const vmActionsToggle = document.getElementById('vmActionsToggle');
+const vmActionsMenu = document.getElementById('vmActionsMenu');
+const dangerZoneToggle = document.getElementById('dangerZoneToggle');
+const dangerZoneContent = document.getElementById('dangerZoneContent');
+const dangerZoneChevron = document.getElementById('dangerZoneChevron');
+if (vmActionsToggle && vmActionsMenu) {
+  vmActionsToggle.addEventListener('click', (event) => {
+    event.stopPropagation();
+    const open = !vmActionsMenu.classList.contains('is-open');
+    vmActionsMenu.classList.toggle('is-open', open);
+    vmActionsToggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+  });
+  document.addEventListener('click', (event) => {
+    if (!vmActionsMenu.contains(event.target) && !vmActionsToggle.contains(event.target)) {
+      vmActionsMenu.classList.remove('is-open');
+      vmActionsToggle.setAttribute('aria-expanded', 'false');
+    }
+  });
+}
+
+if (dangerZoneToggle && dangerZoneContent && dangerZoneChevron) {
+  dangerZoneToggle.addEventListener('click', () => {
+    const open = dangerZoneContent.classList.contains('hidden');
+    dangerZoneContent.classList.toggle('hidden', !open);
+    dangerZoneToggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+    dangerZoneChevron.classList.toggle('is-open', open);
+  });
+}
+
+function openOperationOutput(action, createdAt, log) {
+  const meta = document.getElementById('operationOutputMeta');
+  const body = document.getElementById('operationOutputBody');
+  if (meta) {
+    meta.textContent = `${action} • ${createdAt ? timeAgo(createdAt) : 'unknown time'}`;
+  }
+  if (body) {
+    body.textContent = log || 'No output captured';
+  }
+  openDialog('operationOutputDialog');
+}
+
+document.querySelectorAll('[data-operation-output]').forEach((button) => {
+  button.addEventListener('click', () => {
+    openOperationOutput(
+      button.dataset.action || '',
+      button.dataset.createdAt || '',
+      button.dataset.log || ''
+    );
+  });
+});
+
 async function vmAction(action) {
   const alert = document.getElementById('actionAlert');
   try {
@@ -216,10 +453,8 @@ async function deleteVm() {
   closeDialog('deleteVmDialog');
   try {
     const data = await apiFetch(`/api/agents/${AGENT_NAME}/vm/${VM_NAME}`, 'DELETE');
-    showInlineAlert(alert, 'warning', `Delete job queued (job_id: ${data.job_id || '?'})`);
-    if (data.job_id) {
-      setTimeout(() => { window.location = `/jobs/${data.job_id}`; }, 1200);
-    }
+    showInlineAlert(alert, 'warning', `VM ${data.name || VM_NAME} deleted.`);
+    setTimeout(() => { window.location = `/vm/${encodeURIComponent(AGENT_NAME)}/${encodeURIComponent(VM_NAME)}`; }, 1200);
   } catch (e) {
     showInlineAlert(alert, 'danger', e.message || 'Delete failed.');
   }

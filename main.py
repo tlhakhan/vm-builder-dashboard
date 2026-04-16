@@ -1,14 +1,21 @@
-import argparse
-import asyncio
 import os
-import sys
 
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
-from fastapi.templating import Jinja2Templates
 
 import database
+from config import (
+    AGENT_HEALTH_INTERVAL,
+    AGENT_HEALTH_TIMEOUT_SECONDS,
+    AGENT_PKI_DIR,
+    AGENT_TIMEOUT_SECONDS,
+    AGENT_TLS_INSECURE_SKIP_VERIFY,
+    DB_PATH,
+)
 from routers import api, views
+from services.agents import AgentClient
+from services.health import AgentHealthMonitor
+from services import pki
 
 # ---------------------------------------------------------------------------
 # App factory
@@ -22,84 +29,30 @@ app.include_router(api.router)
 
 @app.on_event("startup")
 async def on_startup():
-    from config import DB_PATH
     db_dir = os.path.dirname(DB_PATH)
     if db_dir:
         os.makedirs(db_dir, exist_ok=True)
     await database.init_db()
+    pki_paths = pki.ensure(AGENT_PKI_DIR)
+    app.state.agent_pki = pki_paths
+    app.state.agent_client = AgentClient(
+        ca_file=pki_paths["ca_cert"],
+        cert_file=pki_paths["client_cert"],
+        key_file=pki_paths["client_key"],
+        insecure_skip_verify=AGENT_TLS_INSECURE_SKIP_VERIFY,
+        timeout=AGENT_TIMEOUT_SECONDS,
+    )
+    app.state.health_monitor = AgentHealthMonitor(
+        database,
+        app.state.agent_client,
+        interval_seconds=AGENT_HEALTH_INTERVAL,
+        timeout_seconds=AGENT_HEALTH_TIMEOUT_SECONDS,
+    )
+    await app.state.health_monitor.start()
 
 
-# ---------------------------------------------------------------------------
-# CLI commands
-# ---------------------------------------------------------------------------
-
-async def _cli_create_user(username: str, role: str):
-    from config import DB_PATH
-    db_dir = os.path.dirname(DB_PATH)
-    if db_dir:
-        os.makedirs(db_dir, exist_ok=True)
-    await database.init_db()
-
-    existing = await database.get_user_by_username(username)
-    if existing:
-        print(f"Error: user '{username}' already exists.")
-        sys.exit(1)
-
-    import getpass
-    password = getpass.getpass("Password: ")
-    confirm  = getpass.getpass("Confirm password: ")
-    if password != confirm:
-        print("Error: passwords do not match.")
-        sys.exit(1)
-
-    from auth import hash_password
-    await database.create_user(username, hash_password(password),
-                               role=role, status="active")
-    print(f"User '{username}' created with role '{role}'.")
-
-
-async def _cli_reset_password(username: str):
-    from config import DB_PATH
-    db_dir = os.path.dirname(DB_PATH)
-    if db_dir:
-        os.makedirs(db_dir, exist_ok=True)
-    await database.init_db()
-
-    user = await database.get_user_by_username(username)
-    if not user:
-        print(f"Error: user '{username}' not found.")
-        sys.exit(1)
-
-    import getpass
-    password = getpass.getpass("New password: ")
-    confirm  = getpass.getpass("Confirm password: ")
-    if password != confirm:
-        print("Error: passwords do not match.")
-        sys.exit(1)
-
-    from auth import hash_password
-    await database.update_user_password(username, hash_password(password))
-    print(f"Password for '{username}' updated.")
-
-
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="vm-builder-dashboard CLI")
-    subparsers = parser.add_subparsers(dest="command")
-
-    p_create = subparsers.add_parser("create-user", help="Create a new user")
-    p_create.add_argument("--username", required=True)
-    p_create.add_argument("--role", default="admin",
-                          choices=["admin", "operator", "viewer"])
-
-    p_reset = subparsers.add_parser("reset-password", help="Reset a user's password")
-    p_reset.add_argument("--username", required=True)
-
-    args = parser.parse_args()
-
-    if args.command == "create-user":
-        asyncio.run(_cli_create_user(args.username, args.role))
-    elif args.command == "reset-password":
-        asyncio.run(_cli_reset_password(args.username))
-    else:
-        parser.print_help()
-        sys.exit(1)
+@app.on_event("shutdown")
+async def on_shutdown():
+    health_monitor = getattr(app.state, "health_monitor", None)
+    if health_monitor:
+        await health_monitor.stop()

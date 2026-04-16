@@ -12,9 +12,10 @@ Restart=on-failure
 RestartSec=5
 
 # Environment overrides — edit as needed
-Environment=APISERVER_URL=http://localhost:8080
 Environment=DB_PATH=/var/lib/vm-builder-dashboard/db.sqlite3
+# Environment=AGENT_PKI_DIR=/var/lib/vm-builder-dashboard/pki
 # Environment=SECRET_KEY=change-me-to-a-random-string
+# Environment=AGENT_TLS_INSECURE_SKIP_VERIFY=false
 
 # Harden the service
 NoNewPrivileges=true

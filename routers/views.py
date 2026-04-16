@@ -3,42 +3,79 @@ HTML view routes — render Jinja2 templates.
 All handlers use async def to match the aiosqlite async database layer.
 """
 
-import json
-import urllib.error
-import urllib.request
+from pathlib import PurePosixPath
+from urllib.parse import urlsplit
 
 from fastapi import APIRouter, Cookie, Form, Request, status
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 
 from auth import hash_password, verify_password, make_session
-from config import APISERVER_URL
 import database
+from services.agents import AgentError, AgentRecord
 
 router = APIRouter()
 templates = Jinja2Templates(directory="templates")
 
 
 # ---------------------------------------------------------------------------
-# Proxy helper (returns raw dict or None on error)
+# Agent helper (returns raw payload or None on error)
 # ---------------------------------------------------------------------------
 
-def _apiserver(method: str, path: str, body: dict = None):
-    url = f"{APISERVER_URL}{path}"
-    data = json.dumps(body).encode() if body else None
-    req = urllib.request.Request(url, data=data, method=method)
-    req.add_header("Content-Type", "application/json")
+async def _apiserver(request: Request, method: str, path: str, body: dict = None):
     try:
-        with urllib.request.urlopen(req, timeout=5) as resp:
-            raw = resp.read()
-            if not raw:
-                return {}
-            try:
-                return json.loads(raw)
-            except json.JSONDecodeError:
-                return {"raw": raw.decode(errors="replace")}
-    except Exception:
+        if method == "GET" and path == "/agents":
+            rows = await database.list_agents()
+            return [
+                {
+                    "name": row["name"],
+                    "url": row["url"],
+                    **request.app.state.health_monitor.status(row["name"]),
+                }
+                for row in rows
+            ]
+
+        if method == "GET" and path == "/vm":
+            rows = await database.list_agents()
+            items = []
+            for row in rows:
+                agent = AgentRecord(name=row["name"], url=row["url"])
+                agent_status = request.app.state.health_monitor.status(agent.name)
+                item = {"agent_name": agent.name, "reachable": agent_status["reachable"], "vms": []}
+                if agent_status["reachable"]:
+                    try:
+                        raw_vms = await request.app.state.agent_client.list_vms(agent)
+                        item["vms"] = [
+                            {
+                                "agent_name": agent.name,
+                                "id": vm.get("id"),
+                                "name": vm.get("name"),
+                                "state": vm.get("state"),
+                            }
+                            for vm in raw_vms
+                            if isinstance(vm, dict)
+                        ]
+                    except AgentError as exc:
+                        item["error"] = str(exc.detail)
+                items.append(item)
+            return items
+
+        parts = [part for part in path.strip("/").split("/") if part]
+        if len(parts) >= 2 and parts[0] == "agents":
+            row = await database.get_agent(parts[1])
+            if not row:
+                return None
+            agent = AgentRecord(name=row["name"], url=row["url"])
+
+            if parts[2:] == ["node"] and method == "GET":
+                return await request.app.state.agent_client.get_node(agent)
+            if parts[2:] == ["vm"] and method == "GET":
+                return await request.app.state.agent_client.list_vms(agent)
+            if len(parts) == 4 and parts[2] == "vm" and method == "GET":
+                return await request.app.state.agent_client.get_vm(agent, parts[3])
+    except AgentError:
         return None
+    return None
 
 
 def _parse_int(value):
@@ -61,6 +98,16 @@ def _kib_string_to_mb(value):
     if parsed is None:
         return None
     return parsed // 1024
+
+
+def _cloud_image_filename(value) -> str | None:
+    if not isinstance(value, str) or not value.strip():
+        return None
+    path = urlsplit(value).path.rstrip("/")
+    if not path:
+        return None
+    name = PurePosixPath(path).name
+    return name or None
 
 
 def _normalize_vm_common(raw_vm: dict, default_agent_name: str = "") -> dict:
@@ -89,6 +136,13 @@ def _normalize_vm_common(raw_vm: dict, default_agent_name: str = "") -> dict:
     )
 
     creation_params = raw_vm.get("creation_params") or vm_data.get("creation_params") or {}
+    cloud_image_url = (
+        vm_data.get("cloud_image_url")
+        or raw_vm.get("cloud_image_url")
+        or creation_params.get("cloud_image_url")
+        or creation_params.get("image_url")
+    )
+    cloud_image_filename = _cloud_image_filename(cloud_image_url)
 
     return {
         **raw_vm,
@@ -124,6 +178,8 @@ def _normalize_vm_common(raw_vm: dict, default_agent_name: str = "") -> dict:
         "uuid": vm_data.get("uuid") or raw_vm.get("uuid"),
         "persistent": vm_data.get("persistent") or raw_vm.get("persistent"),
         "autostart": vm_data.get("autostart") or raw_vm.get("autostart"),
+        "cloud_image_url": cloud_image_url,
+        "cloud_image_filename": cloud_image_filename,
         "creation_params": creation_params,
     }
 
@@ -361,14 +417,14 @@ async def physical_view(request: Request, session_token: str = Cookie(default=No
     if redir:
         return redir
 
-    raw_agents = _apiserver("GET", "/agents") or []
+    raw_agents = await _apiserver(request, "GET", "/agents") or []
     agents = []
     for raw in raw_agents:
         if not isinstance(raw, dict):
             continue
         agent = _normalize_agent(raw)
         if agent.get("reachable"):
-            node_raw = _apiserver("GET", f"/agents/{agent['name']}/node") or {}
+            node_raw = await _apiserver(request, "GET", f"/agents/{agent['name']}/node") or {}
         else:
             node_raw = {}
         agent["node"] = _normalize_node_stats(node_raw)
@@ -391,7 +447,7 @@ async def virtual_view(request: Request, session_token: str = Cookie(default=Non
     if redir:
         return redir
 
-    raw_agents = _apiserver("GET", "/agents") or []
+    raw_agents = await _apiserver(request, "GET", "/agents") or []
     flat_vms = []
 
     for raw in raw_agents:
@@ -401,7 +457,7 @@ async def virtual_view(request: Request, session_token: str = Cookie(default=Non
         if not agent.get("reachable"):
             continue
         agent_name = agent["name"]
-        raw_vms = _apiserver("GET", f"/agents/{agent_name}/vm") or []
+        raw_vms = await _apiserver(request, "GET", f"/agents/{agent_name}/vm") or []
         if not isinstance(raw_vms, list):
             raw_vms = raw_vms.get("vms") or []
         for stub in raw_vms:
@@ -410,7 +466,7 @@ async def virtual_view(request: Request, session_token: str = Cookie(default=Non
             vm_name = stub.get("name") or stub.get("vm_name")
             if not vm_name:
                 continue
-            detail = _apiserver("GET", f"/agents/{agent_name}/vm/{vm_name}") or {}
+            detail = await _apiserver(request, "GET", f"/agents/{agent_name}/vm/{vm_name}") or {}
             if isinstance(detail, dict) and not detail.get("error"):
                 flat_vms.append(_normalize_vm_common(detail, agent_name))
             else:
@@ -442,8 +498,11 @@ async def vm_detail(request: Request, agent_name: str, vm_name: str,
     if redir:
         return redir
 
-    vm   = _normalize_vm_detail(_apiserver("GET", f"/agents/{agent_name}/vm/{vm_name}"), agent_name)
-    jobs = await database.list_jobs_for_vm(agent_name, vm_name)
+    vm = _normalize_vm_detail(
+        await _apiserver(request, "GET", f"/agents/{agent_name}/vm/{vm_name}"),
+        agent_name,
+    )
+    operations = await database.list_operations_for_vm(agent_name, vm_name)
 
     return templates.TemplateResponse(
         request, "vm_detail.html",
@@ -452,61 +511,8 @@ async def vm_detail(request: Request, agent_name: str, vm_name: str,
             "agent_name": agent_name,
             "vm_name":    vm_name,
             "vm":         vm,
-            "jobs":       [dict(j) for j in jobs],
+            "operations": [dict(item) for item in operations],
         },
-    )
-
-
-# ---------------------------------------------------------------------------
-# Jobs list
-# ---------------------------------------------------------------------------
-
-@router.get("/jobs", response_class=HTMLResponse)
-async def jobs_view(request: Request,
-                    agent: str = None, vm: str = None,
-                    action: str = None, job_status: str = None,
-                    session_token: str = Cookie(default=None)):
-    user, redir = await _require_auth(session_token, "/jobs")
-    if redir:
-        return redir
-
-    jobs = await database.list_jobs(agent_name=agent, vm_name=vm,
-                                    action=action, status=job_status)
-    return templates.TemplateResponse(
-        request, "jobs.html",
-        {
-            "user":          dict(user),
-            "jobs":          [dict(j) for j in jobs],
-            "filter_agent":  agent or "",
-            "filter_vm":     vm or "",
-            "filter_action": action or "",
-            "filter_status": job_status or "",
-        },
-    )
-
-
-# ---------------------------------------------------------------------------
-# Job Detail
-# ---------------------------------------------------------------------------
-
-@router.get("/jobs/{job_id}", response_class=HTMLResponse)
-async def job_detail(request: Request, job_id: str,
-                     session_token: str = Cookie(default=None)):
-    user, redir = await _require_auth(session_token, f"/jobs/{job_id}")
-    if redir:
-        return redir
-
-    row = await database.get_job(job_id)
-    if not row:
-        return templates.TemplateResponse(
-            request, "base.html",
-            {"user": dict(user), "error": f"Job {job_id} not found."},
-            status_code=404,
-        )
-
-    return templates.TemplateResponse(
-        request, "job_detail.html",
-        {"user": dict(user), "job": dict(row)},
     )
 
 
@@ -520,8 +526,8 @@ async def agents_view(request: Request, session_token: str = Cookie(default=None
     if redir:
         return redir
 
-    raw_agents = _apiserver("GET", "/agents") or []
-    aggregate_vm = _apiserver("GET", "/vm") or []
+    raw_agents = await _apiserver(request, "GET", "/agents") or []
+    aggregate_vm = await _apiserver(request, "GET", "/vm") or []
     vm_buckets, _ = _extract_vms_from_aggregate(aggregate_vm)
     agents = []
     for raw_agent in raw_agents:

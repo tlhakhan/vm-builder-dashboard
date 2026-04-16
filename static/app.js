@@ -37,8 +37,16 @@ function showInlineAlert(el, type, msg) {
   if (!el) {
     return;
   }
+  if (el._alertTimeoutId) {
+    window.clearTimeout(el._alertTimeoutId);
+  }
   el.className = `flash flash-${type}`;
   el.innerHTML = `<i class="bi bi-info-circle me-1"></i>${escapeHtml(msg)}`;
+  el._alertTimeoutId = window.setTimeout(() => {
+    el.className = 'flash hidden';
+    el.innerHTML = '';
+    el._alertTimeoutId = null;
+  }, 3000);
 }
 
 function escapeHtml(value) {

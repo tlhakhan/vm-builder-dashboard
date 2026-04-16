@@ -2,36 +2,14 @@
 {% block title %}Users{% endblock %}
 {% block topbar_title %}<i class="bi bi-people me-2"></i>Users{% endblock %}
 
-{% block topbar_actions %}
-<button type="button" onclick="openDialog('createUserDialog')"><i class="bi bi-person-plus me-1"></i>Create user</button>
-{% endblock %}
-
 {% block content %}
 <article id="usersAlert" class="flash hidden"></article>
 
-<div class="page-intro">
-  <div>
-    <h1>User access</h1>
-  </div>
-  <div class="metric-grid" style="min-width:min(24rem, 100%);">
-    <article class="metric-card">
-      <div class="metric-icon"><i class="bi bi-person-check"></i></div>
-      <div class="metric-label">Active</div>
-      <div class="metric-value">{{ active_users | length }}</div>
-    </article>
-    <article class="metric-card">
-      <div class="metric-icon"><i class="bi bi-hourglass-split"></i></div>
-      <div class="metric-label">Pending</div>
-      <div class="metric-value">{{ pending_users | length }}</div>
-    </article>
-  </div>
-</div>
-
-<div class="tabs" role="tablist">
-  <button type="button" class="secondary tab-button active" data-tab-target="activePane">
+<div class="tabs users-tabs" role="tablist">
+  <button type="button" class="secondary tab-button users-tab-button active" data-tab-target="activePane">
     <i class="bi bi-person-check me-1"></i>Active <span class="soft-pill">{{ active_users | length }}</span>
   </button>
-  <button type="button" class="secondary tab-button" data-tab-target="pendingPane">
+  <button type="button" class="secondary tab-button users-tab-button" data-tab-target="pendingPane">
     <i class="bi bi-hourglass-split me-1"></i>Pending
     {% if pending_users %}<span class="soft-pill">{{ pending_users | length }}</span>{% endif %}
   </button>
@@ -40,7 +18,26 @@
 <section id="activePane" class="tab-panel">
   <article class="panel">
     {% if active_users %}
-    <div class="table-wrap">
+    <div class="panel-header">
+      <h2 class="panel-title"><i class="bi bi-person-check"></i>Active User Inventory</h2>
+      <div class="action-menu-shell users-actions-shell">
+        <button
+          type="button"
+          class="action-menu-toggle users-actions-toggle"
+          data-users-actions-toggle
+          aria-label="Open user actions"
+          aria-expanded="false"
+        >
+          <i class="bi bi-three-dots-vertical"></i>
+        </button>
+        <div class="action-menu users-actions-menu" data-users-actions-menu>
+          <button type="button" class="action-menu-btn users-action-menu-btn" onclick="openDialog('createUserDialog')">
+            <i class="bi bi-person-plus"></i>Create user
+          </button>
+        </div>
+      </div>
+    </div>
+    <div class="table-wrap users-active-table">
       <table>
         <thead>
           <tr>
@@ -58,23 +55,100 @@
               {% if u.id == user.user_id %}<span class="soft-pill">you</span>{% endif %}
             </td>
             <td><span class="role-pill role-{{ u.role if u.role in ('admin','operator','viewer') else 'viewer' }}">{{ u.role }}</span></td>
-            <td class="muted small">{{ u.created_at }}</td>
-            <td class="right">
-              <div class="actions" style="justify-content:flex-end;">
-                <button type="button" class="btn-ghost-warning" onclick="openEditRole({{ u.id }}, '{{ u.role }}')">
-                  <i class="bi bi-pencil me-1"></i>Edit role
+            <td class="muted small" data-ts="{{ u.created_at }}">{{ u.created_at }}</td>
+            <td class="users-actions-cell">
+              <div class="action-menu-shell users-actions-shell">
+                <button
+                  type="button"
+                  class="action-menu-toggle users-actions-toggle"
+                  data-users-actions-toggle
+                  aria-label="Open user actions"
+                  aria-expanded="false"
+                >
+                  <i class="bi bi-three-dots-vertical"></i>
                 </button>
-                {% if u.id != user.user_id %}
-                <button type="button" class="btn-ghost-danger" onclick="deactivateUser({{ u.id }}, '{{ u.username }}')">
-                  <i class="bi bi-person-slash me-1"></i>Deactivate
-                </button>
-                {% endif %}
+                <div class="action-menu users-actions-menu" data-users-actions-menu>
+                  <button
+                    type="button"
+                    class="action-menu-btn action-menu-warning users-action-menu-btn users-action-menu-warning"
+                    data-user-action="edit-role"
+                    data-user-id="{{ u.id }}"
+                    data-user-role="{{ u.role | e }}"
+                    data-username="{{ u.username | e }}"
+                  >
+                    <i class="bi bi-pencil"></i>Edit role
+                  </button>
+                  {% if u.id != user.user_id %}
+                  <button
+                    type="button"
+                    class="action-menu-btn action-menu-danger users-action-menu-btn users-action-menu-danger"
+                    data-user-action="deactivate"
+                    data-user-id="{{ u.id }}"
+                    data-username="{{ u.username | e }}"
+                  >
+                    <i class="bi bi-person-slash"></i>Deactivate
+                  </button>
+                  {% endif %}
+                </div>
               </div>
             </td>
           </tr>
           {% endfor %}
         </tbody>
       </table>
+    </div>
+    <div class="users-active-cards">
+      {% for u in active_users %}
+      <article class="user-card">
+        <div class="user-card-head">
+          <div class="user-card-heading">
+            <h2 class="user-card-title">{{ u.username }}</h2>
+            {% if u.id == user.user_id %}<span class="soft-pill">you</span>{% endif %}
+          </div>
+          <div class="user-card-head-side">
+            <span class="role-pill role-{{ u.role if u.role in ('admin','operator','viewer') else 'viewer' }}">{{ u.role }}</span>
+            <div class="action-menu-shell users-actions-shell">
+              <button
+                type="button"
+                class="action-menu-toggle users-actions-toggle"
+                data-users-actions-toggle
+                aria-label="Open user actions"
+                aria-expanded="false"
+              >
+                <i class="bi bi-three-dots-vertical"></i>
+              </button>
+              <div class="action-menu users-actions-menu" data-users-actions-menu>
+                <button
+                  type="button"
+                  class="action-menu-btn action-menu-warning users-action-menu-btn users-action-menu-warning"
+                  data-user-action="edit-role"
+                  data-user-id="{{ u.id }}"
+                  data-user-role="{{ u.role | e }}"
+                  data-username="{{ u.username | e }}"
+                >
+                  <i class="bi bi-pencil"></i>Edit role
+                </button>
+                {% if u.id != user.user_id %}
+                <button
+                  type="button"
+                  class="action-menu-btn action-menu-danger users-action-menu-btn users-action-menu-danger"
+                  data-user-action="deactivate"
+                  data-user-id="{{ u.id }}"
+                  data-username="{{ u.username | e }}"
+                >
+                  <i class="bi bi-person-slash"></i>Deactivate
+                </button>
+                {% endif %}
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="user-card-item">
+          <div class="user-card-label">Created</div>
+          <div class="muted small" data-ts="{{ u.created_at }}">{{ u.created_at }}</div>
+        </div>
+      </article>
+      {% endfor %}
     </div>
     {% else %}
     <article class="empty-state">
@@ -89,7 +163,10 @@
 <section id="pendingPane" class="tab-panel" hidden>
   <article class="panel">
     {% if pending_users %}
-    <div class="table-wrap">
+    <div class="panel-header">
+      <h2 class="panel-title"><i class="bi bi-hourglass-split"></i>Pending User Requests</h2>
+    </div>
+    <div class="table-wrap users-pending-table">
       <table>
         <thead>
           <tr>
@@ -102,21 +179,92 @@
           {% for u in pending_users %}
           <tr>
             <td><strong>{{ u.username }}</strong></td>
-            <td class="muted small">{{ u.created_at }}</td>
-            <td class="right">
-              <div class="actions" style="justify-content:flex-end;">
-                <button type="button" onclick="openApproveModal({{ u.id }}, '{{ u.username }}')">
-                  <i class="bi bi-check-lg me-1"></i>Approve
+            <td class="muted small" data-ts="{{ u.created_at }}">{{ u.created_at }}</td>
+            <td class="users-actions-cell">
+              <div class="action-menu-shell users-actions-shell">
+                <button
+                  type="button"
+                  class="action-menu-toggle users-actions-toggle"
+                  data-users-actions-toggle
+                  aria-label="Open user actions"
+                  aria-expanded="false"
+                >
+                  <i class="bi bi-three-dots-vertical"></i>
                 </button>
-                <button type="button" class="btn-ghost-danger" onclick="rejectUser({{ u.id }}, '{{ u.username }}')">
-                  <i class="bi bi-x-lg me-1"></i>Reject
-                </button>
+                <div class="action-menu users-actions-menu" data-users-actions-menu>
+                  <button
+                    type="button"
+                    class="action-menu-btn action-menu-success users-action-menu-btn users-action-menu-success"
+                    data-user-action="approve"
+                    data-user-id="{{ u.id }}"
+                    data-username="{{ u.username | e }}"
+                  >
+                    <i class="bi bi-check-lg"></i>Approve
+                  </button>
+                  <button
+                    type="button"
+                    class="action-menu-btn action-menu-danger users-action-menu-btn users-action-menu-danger"
+                    data-user-action="reject"
+                    data-user-id="{{ u.id }}"
+                    data-username="{{ u.username | e }}"
+                  >
+                    <i class="bi bi-x-lg"></i>Reject
+                  </button>
+                </div>
               </div>
             </td>
           </tr>
           {% endfor %}
         </tbody>
       </table>
+    </div>
+    <div class="users-pending-cards">
+      {% for u in pending_users %}
+      <article class="user-card">
+        <div class="user-card-head">
+          <div class="user-card-heading">
+            <h2 class="user-card-title">{{ u.username }}</h2>
+          </div>
+          <div class="user-card-head-side">
+            <div class="action-menu-shell users-actions-shell">
+              <button
+                type="button"
+                class="action-menu-toggle users-actions-toggle"
+                data-users-actions-toggle
+                aria-label="Open user actions"
+                aria-expanded="false"
+              >
+                <i class="bi bi-three-dots-vertical"></i>
+              </button>
+              <div class="action-menu users-actions-menu" data-users-actions-menu>
+                <button
+                  type="button"
+                  class="action-menu-btn action-menu-success users-action-menu-btn users-action-menu-success"
+                  data-user-action="approve"
+                  data-user-id="{{ u.id }}"
+                  data-username="{{ u.username | e }}"
+                >
+                  <i class="bi bi-check-lg"></i>Approve
+                </button>
+                <button
+                  type="button"
+                  class="action-menu-btn action-menu-danger users-action-menu-btn users-action-menu-danger"
+                  data-user-action="reject"
+                  data-user-id="{{ u.id }}"
+                  data-username="{{ u.username | e }}"
+                >
+                  <i class="bi bi-x-lg"></i>Reject
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="user-card-item">
+          <div class="user-card-label">Requested</div>
+          <div class="muted small" data-ts="{{ u.created_at }}">{{ u.created_at }}</div>
+        </div>
+      </article>
+      {% endfor %}
     </div>
     {% else %}
     <article class="empty-state">
@@ -131,7 +279,7 @@
 <dialog id="approveDialog">
   <article style="margin:0;">
     <div class="dialog-header">
-      <h3 class="dialog-title"><i class="bi bi-check2-circle me-1"></i>Approve user</h3>
+      <h3 class="dialog-title"><i class="bi bi-check2-circle me-2"></i>Approve user</h3>
       <button type="button" class="dialog-close" onclick="closeDialog('approveDialog')"><i class="bi bi-x-lg"></i></button>
     </div>
     <p>Approving: <strong id="approveUsername"></strong></p>
@@ -152,7 +300,7 @@
 <dialog id="editRoleDialog">
   <article style="margin:0;">
     <div class="dialog-header">
-      <h3 class="dialog-title"><i class="bi bi-pencil-square me-1"></i>Edit role</h3>
+      <h3 class="dialog-title"><i class="bi bi-pencil-square me-2"></i>Edit role</h3>
       <button type="button" class="dialog-close" onclick="closeDialog('editRoleDialog')"><i class="bi bi-x-lg"></i></button>
     </div>
     <input type="hidden" id="editRoleUserId">
@@ -172,7 +320,7 @@
 <dialog id="createUserDialog">
   <article style="margin:0;">
     <div class="dialog-header">
-      <h3 class="dialog-title"><i class="bi bi-person-plus me-1"></i>Create user</h3>
+      <h3 class="dialog-title"><i class="bi bi-person-plus me-2"></i>Create user</h3>
       <button type="button" class="dialog-close" onclick="closeDialog('createUserDialog')"><i class="bi bi-x-lg"></i></button>
     </div>
     <label for="newUsername">Username</label>
@@ -193,11 +341,211 @@
 </dialog>
 {% endblock %}
 
+{% block head %}
+<style>
+  .users-tabs {
+    gap: 0.5rem;
+    margin-bottom: 0.9rem;
+  }
+  .users-tab-button {
+    padding: 0.38rem 0.75rem;
+    font-size: 0.84rem;
+    line-height: 1.2;
+    border-radius: 999px;
+    background: transparent;
+    border: 1px solid rgba(148, 163, 184, 0.22);
+    color: #475569;
+    box-shadow: none;
+  }
+  .users-tab-button:hover {
+    background: rgba(148, 163, 184, 0.08);
+    color: #334155;
+  }
+  .users-tab-button.active,
+  .users-tab-button.secondary.active {
+    background: rgba(37, 99, 235, 0.08);
+    border-color: rgba(37, 99, 235, 0.20);
+    color: #1d4ed8;
+  }
+  .users-tab-button .soft-pill {
+    margin-left: 0.2rem;
+  }
+  .users-active-cards,
+  .users-pending-cards {
+    display: none;
+  }
+  .user-card {
+    display: grid;
+    gap: 0.9rem;
+    padding: 1rem;
+    border: 1px solid var(--app-border);
+    border-radius: 1rem;
+    background: #fff;
+    box-shadow: 0 4px 16px rgba(15, 23, 42, 0.06);
+  }
+  .user-card-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 0.75rem;
+  }
+  .user-card-heading {
+    min-width: 0;
+  }
+  .user-card-head-side {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.55rem;
+    flex-shrink: 0;
+  }
+  .user-card-title {
+    margin: 0 0 0.25rem;
+    font-size: 1rem;
+  }
+  .users-actions-cell {
+    text-align: right;
+  }
+  @media (min-width: 761px) {
+    .users-active-table,
+    .users-pending-table {
+      overflow: visible;
+    }
+  }
+  .user-card-item {
+    padding: 0.8rem 0.9rem;
+    border-radius: 0.9rem;
+    background: var(--app-panel-alt);
+    border: 1px solid rgba(148, 163, 184, 0.16);
+  }
+  .user-card-label {
+    color: var(--app-text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    font-size: 0.68rem;
+    margin-bottom: 0.25rem;
+  }
+  @media (max-width: 760px) {
+    .users-tabs {
+      flex-wrap: nowrap;
+      overflow-x: auto;
+      padding-bottom: 0.1rem;
+      scrollbar-width: none;
+    }
+    .users-tabs::-webkit-scrollbar {
+      display: none;
+    }
+    .users-tab-button {
+      flex: 0 0 auto;
+      white-space: nowrap;
+    }
+    .users-active-table,
+    .users-pending-table {
+      display: none;
+    }
+    .users-active-cards,
+    .users-pending-cards {
+      display: grid;
+      gap: 0.9rem;
+    }
+    .user-card-head,
+    .user-card-head-side {
+      align-items: center;
+    }
+  }
+</style>
+{% endblock %}
+
 {% block scripts %}
 <script>
 const usersAlert = document.getElementById('usersAlert');
 
 setupTabs();
+
+function timeAgo(isoStr) {
+  if (!isoStr) return '—';
+  const d = new Date(isoStr.endsWith('Z') ? isoStr : isoStr + 'Z');
+  const secs = Math.floor((Date.now() - d.getTime()) / 1000);
+  if (isNaN(secs) || secs < 0) return isoStr;
+  if (secs < 60) return `${secs}s ago`;
+  const mins = Math.floor(secs / 60);
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  const days = Math.floor(hrs / 24);
+  return `${days}d ago`;
+}
+
+document.querySelectorAll('[data-ts]').forEach((el) => {
+  el.textContent = timeAgo(el.dataset.ts);
+});
+
+let openUsersMenu = null;
+
+document.querySelectorAll('[data-users-actions-toggle]').forEach((toggle) => {
+  toggle.addEventListener('click', (event) => {
+    event.stopPropagation();
+    const shell = toggle.closest('.users-actions-shell');
+    const menu = shell ? shell.querySelector('[data-users-actions-menu]') : null;
+    if (!menu) return;
+    const willOpen = !menu.classList.contains('is-open');
+    if (openUsersMenu && openUsersMenu !== menu) {
+      openUsersMenu.classList.remove('is-open');
+      openUsersMenu.parentElement?.querySelector('[data-users-actions-toggle]')?.setAttribute('aria-expanded', 'false');
+    }
+    menu.classList.toggle('is-open', willOpen);
+    toggle.setAttribute('aria-expanded', willOpen ? 'true' : 'false');
+    openUsersMenu = willOpen ? menu : null;
+  });
+});
+
+document.addEventListener('click', (event) => {
+  if (!openUsersMenu) return;
+  const shell = openUsersMenu.closest('.users-actions-shell');
+  if (shell && !shell.contains(event.target)) {
+    openUsersMenu.classList.remove('is-open');
+    shell.querySelector('[data-users-actions-toggle]')?.setAttribute('aria-expanded', 'false');
+    openUsersMenu = null;
+  }
+});
+
+function closeUsersActionMenu(button) {
+  const shell = button.closest('.users-actions-shell');
+  const menu = shell ? shell.querySelector('[data-users-actions-menu]') : null;
+  const toggle = shell ? shell.querySelector('[data-users-actions-toggle]') : null;
+  if (menu) {
+    menu.classList.remove('is-open');
+  }
+  if (toggle) {
+    toggle.setAttribute('aria-expanded', 'false');
+  }
+  openUsersMenu = null;
+}
+
+document.querySelectorAll('[data-user-action]').forEach((button) => {
+  button.addEventListener('click', async (event) => {
+    event.stopPropagation();
+    closeUsersActionMenu(button);
+    const action = button.dataset.userAction;
+    const userId = button.dataset.userId;
+    const username = button.dataset.username || '';
+    const role = button.dataset.userRole || 'viewer';
+    if (action === 'edit-role') {
+      openEditRole(userId, role);
+      return;
+    }
+    if (action === 'deactivate') {
+      await deactivateUser(userId, username);
+      return;
+    }
+    if (action === 'approve') {
+      openApproveModal(userId, username);
+      return;
+    }
+    if (action === 'reject') {
+      await rejectUser(userId, username);
+    }
+  });
+});
 
 function openApproveModal(userId, username) {
   document.getElementById('approveUserId').value = userId;

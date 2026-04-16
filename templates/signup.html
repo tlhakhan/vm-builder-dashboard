@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="light">
-  <title>Request Access — vm-builder-dashboard</title>
+  <title>Request Access — VM Builder</title>
   <link rel="stylesheet"
         href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css">
   <link rel="stylesheet"
@@ -25,64 +25,38 @@
         #f1f5f9;
     }
     .auth-shell {
-      width: min(62rem, calc(100vw - 2rem));
-      display: grid;
-      grid-template-columns: 1fr 1.15fr;
+      width: min(34rem, calc(100vw - 2rem));
       border: 1px solid rgba(148, 163, 184, 0.22);
       border-radius: 1.5rem;
-      overflow: hidden;
       background: #ffffff;
       box-shadow: 0 16px 48px rgba(15, 23, 42, 0.10);
     }
-    .auth-copy,
     .auth-panel {
       padding: 2rem;
     }
-    .auth-copy {
-      background:
-        linear-gradient(180deg, rgba(241, 245, 249, 0.9), rgba(248, 250, 252, 0.8)),
-        linear-gradient(135deg, rgba(16, 185, 129, 0.08), rgba(59, 130, 246, 0.04));
-      border-right: 1px solid rgba(148, 163, 184, 0.16);
-    }
-    .auth-mark {
-      width: 3.3rem;
-      height: 3.3rem;
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      border-radius: 1rem;
-      background: rgba(16, 185, 129, 0.10);
-      color: #059669;
-      border: 1px solid rgba(16, 185, 129, 0.20);
-      font-size: 1.4rem;
-      margin-bottom: 1.2rem;
-    }
-    .helper-list {
-      display: grid;
-      gap: 1rem;
-      margin-top: 1.5rem;
-    }
-    .helper-list article {
-      margin: 0;
-      background: rgba(255, 255, 255, 0.8);
-      border: 1px solid rgba(148, 163, 184, 0.18);
-    }
-    .helper-list i {
-      color: #059669;
-    }
     .input-icon {
       position: relative;
+      margin-bottom: 1rem;
     }
     .input-icon i {
       position: absolute;
       left: 0.95rem;
-      top: 50%;
-      transform: translateY(-50%);
+      top: 0;
+      bottom: 0;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 1rem;
+      line-height: 1;
       color: #64748b;
       z-index: 1;
+      pointer-events: none;
     }
     .input-icon input {
       padding-left: 2.7rem;
+      margin-bottom: 0;
+      border-color: rgba(148, 163, 184, 0.28);
+      background: #fff;
     }
     .me-1 {
       margin-right: 0.35rem;
@@ -90,48 +64,14 @@
     .muted {
       color: #64748b;
     }
-    @media (max-width: 900px) {
-      .auth-shell {
-        grid-template-columns: 1fr;
-      }
-      .auth-copy {
-        border-right: 0;
-        border-bottom: 1px solid rgba(148, 163, 184, 0.16);
-      }
-    }
   </style>
 </head>
 <body>
 <main class="auth-shell">
-  <section class="auth-copy">
-    <span class="auth-mark"><i class="bi bi-person-plus"></i></span>
-    <p class="muted" style="margin-bottom:0.35rem; text-transform:uppercase; letter-spacing:.12em; font-size:.72rem;">Access Request</p>
-    <h1 style="margin-bottom:0.6rem;">Request dashboard access</h1>
-    <p style="color:#94a3b8; margin-bottom:0;">Self-signup creates a pending viewer account until an administrator reviews it.</p>
-
-    <div class="helper-list">
-      <article>
-        <header><i class="bi bi-hourglass-split"></i> Approval required</header>
-        <p>New accounts stay pending until an admin approves them from the Users view.</p>
-      </article>
-      <article>
-        <header><i class="bi bi-eye"></i> Viewer by default</header>
-        <p>Self-signup always starts with read-only access until a role is assigned.</p>
-      </article>
-      <article>
-        <header><i class="bi bi-shield-check"></i> Session-based auth</header>
-        <p>Approved users receive revocable server-side sessions after login.</p>
-      </article>
-    </div>
-  </section>
-
   <section class="auth-panel">
-    <div style="display:flex; justify-content:space-between; gap:1rem; align-items:flex-start; margin-bottom:1.25rem;">
-      <div>
-        <h2 style="margin-bottom:0.25rem;">Request access</h2>
-        <p style="margin-bottom:0; color:#94a3b8;">Create a pending account for admin approval.</p>
-      </div>
-      <small><i class="bi bi-person-badge"></i> Viewer request</small>
+    <div style="margin-bottom:1.25rem;">
+      <h2 style="margin-bottom:0.25rem;">Request access</h2>
+      <p style="margin-bottom:0; color:#94a3b8;">Create a pending account for admin approval.</p>
     </div>
 
     {% if success %}

@@ -1,33 +1,9 @@
 {% extends "base.html" %}
-{% block title %}Physical{% endblock %}
-{% block topbar_title %}<i class="bi bi-server me-2"></i>Physical{% endblock %}
+{% block title %}Hypervisors{% endblock %}
+{% block topbar_title %}<i class="bi bi-hdd-network me-2"></i>Hypervisors{% endblock %}
+{% block body_class %}physical-scroll-fix{% endblock %}
 
 {% block content %}
-<div class="page-intro">
-  <div>
-    <h1>Physical infrastructure</h1>
-  </div>
-  <div class="metric-grid" style="min-width:min(28rem, 100%);">
-    <article class="metric-card">
-      <div class="metric-icon"><i class="bi bi-hdd-network"></i></div>
-      <div class="metric-label">Agents</div>
-      <div class="metric-value">{{ agents | length }}</div>
-    </article>
-    <article class="metric-card">
-      <div class="metric-icon"><i class="bi bi-broadcast-pin"></i></div>
-      <div class="metric-label">Reachable</div>
-      <div class="metric-value">{{ agents | selectattr('reachable') | list | length }}</div>
-    </article>
-    <article class="metric-card">
-      <div class="metric-icon"><i class="bi bi-pc-display-horizontal"></i></div>
-      <div class="metric-label">VMs</div>
-      <div class="metric-value">
-        {{ agents | sum(attribute='node.vms_total', start=0) }}
-      </div>
-    </article>
-  </div>
-</div>
-
 <article class="panel">
   {% if not agents %}
   <article class="empty-state">
@@ -39,7 +15,10 @@
     </p>
   </article>
   {% else %}
-  <div class="table-wrap">
+  <div class="panel-header">
+    <h2 class="panel-title"><i class="bi bi-hdd-network"></i>Hypervisor Inventory</h2>
+  </div>
+  <div class="table-wrap physical-table">
     <table>
       <thead>
         <tr>
@@ -85,8 +64,15 @@
               <span>{{ node.ram_used }} / {{ node.ram_total }} GB</span>
               <span class="muted small">{{ node.ram_pct }}%</span>
             </div>
-            <progress value="{{ node.ram_pct }}" max="100"
-              class="{% if node.ram_pct > 85 %}progress-danger{% elif node.ram_pct > 65 %}progress-warn{% endif %}"></progress>
+            {% set ram_bar_class = 'usage-bar-fill' %}
+            {% if node.ram_pct > 85 %}
+            {% set ram_bar_class = ram_bar_class + ' usage-bar-danger' %}
+            {% elif node.ram_pct > 65 %}
+            {% set ram_bar_class = ram_bar_class + ' usage-bar-warn' %}
+            {% endif %}
+            <div class="usage-bar" aria-label="Memory usage {{ node.ram_pct }} percent">
+              <div class="{{ ram_bar_class }}" style="width: {{ node.ram_pct }}%;"></div>
+            </div>
             {% else %}—{% endif %}
           </td>
 
@@ -97,8 +83,15 @@
               <span>{{ node.disk_used }} / {{ node.disk_total }} GB</span>
               <span class="muted small">{{ node.disk_pct }}%</span>
             </div>
-            <progress value="{{ node.disk_pct }}" max="100"
-              class="{% if node.disk_pct > 85 %}progress-danger{% elif node.disk_pct > 65 %}progress-warn{% endif %}"></progress>
+            {% set disk_bar_class = 'usage-bar-fill' %}
+            {% if node.disk_pct > 85 %}
+            {% set disk_bar_class = disk_bar_class + ' usage-bar-danger' %}
+            {% elif node.disk_pct > 65 %}
+            {% set disk_bar_class = disk_bar_class + ' usage-bar-warn' %}
+            {% endif %}
+            <div class="usage-bar" aria-label="Disk usage {{ node.disk_pct }} percent">
+              <div class="{{ disk_bar_class }}" style="width: {{ node.disk_pct }}%;"></div>
+            </div>
             {% else %}—{% endif %}
           </td>
 
@@ -115,12 +108,134 @@
       </tbody>
     </table>
   </div>
+
+  <div class="physical-cards">
+    {% for agent in agents %}
+    {% set node = agent.node %}
+    <article class="physical-card">
+      <div class="physical-card-head">
+        <div>
+          <h2 class="physical-card-title">{{ agent.name }}</h2>
+          {% if node.hostname and node.hostname != agent.name %}
+          <div class="muted small">{{ node.hostname }}</div>
+          {% endif %}
+        </div>
+        <div>
+          {% if agent.reachable %}
+          <span class="status-pill status-running"><i class="bi bi-check-circle"></i>Reachable</span>
+          {% else %}
+          <span class="status-pill status-failed"><i class="bi bi-x-octagon"></i>Unreachable</span>
+          {% endif %}
+        </div>
+      </div>
+
+      <div class="physical-card-grid">
+        <div class="physical-card-item">
+          <div class="physical-card-label">CPU</div>
+          <div class="physical-card-value">
+            {% if node.cpu_total %}
+            {{ node.cpu_total }} cores
+            {% else %}—{% endif %}
+          </div>
+          {% if node.cpu_model %}
+          <div class="muted small">{{ node.cpu_model }}</div>
+          {% endif %}
+        </div>
+
+        <div class="physical-card-item">
+          <div class="physical-card-label">VMs</div>
+          <div class="physical-card-value">
+            {% if agent.reachable %}
+            {{ node.vms_running }} running
+            {% else %}—{% endif %}
+          </div>
+        </div>
+      </div>
+
+      <div class="physical-resource-block">
+        <div class="res-row">
+          <span class="physical-card-label">Memory</span>
+          {% if node.ram_used is not none and node.ram_total %}
+          <span>{{ node.ram_used }} / {{ node.ram_total }} GB</span>
+          {% else %}
+          <span>—</span>
+          {% endif %}
+        </div>
+        {% if node.ram_used is not none and node.ram_total %}
+        {% set ram_bar_class = 'usage-bar-fill' %}
+        {% if node.ram_pct > 85 %}
+        {% set ram_bar_class = ram_bar_class + ' usage-bar-danger' %}
+        {% elif node.ram_pct > 65 %}
+        {% set ram_bar_class = ram_bar_class + ' usage-bar-warn' %}
+        {% endif %}
+        <div class="usage-bar" aria-label="Memory usage {{ node.ram_pct }} percent">
+          <div class="{{ ram_bar_class }}" style="width: {{ node.ram_pct }}%;"></div>
+        </div>
+        <div class="muted small physical-percent">{{ node.ram_pct }}%</div>
+        {% endif %}
+      </div>
+
+      <div class="physical-resource-block">
+        <div class="res-row">
+          <span class="physical-card-label">Disk</span>
+          {% if node.disk_used is not none and node.disk_total %}
+          <span>{{ node.disk_used }} / {{ node.disk_total }} GB</span>
+          {% else %}
+          <span>—</span>
+          {% endif %}
+        </div>
+        {% if node.disk_used is not none and node.disk_total %}
+        {% set disk_bar_class = 'usage-bar-fill' %}
+        {% if node.disk_pct > 85 %}
+        {% set disk_bar_class = disk_bar_class + ' usage-bar-danger' %}
+        {% elif node.disk_pct > 65 %}
+        {% set disk_bar_class = disk_bar_class + ' usage-bar-warn' %}
+        {% endif %}
+        <div class="usage-bar" aria-label="Disk usage {{ node.disk_pct }} percent">
+          <div class="{{ disk_bar_class }}" style="width: {{ node.disk_pct }}%;"></div>
+        </div>
+        <div class="muted small physical-percent">{{ node.disk_pct }}%</div>
+        {% endif %}
+      </div>
+    </article>
+    {% endfor %}
+  </div>
   {% endif %}
 </article>
 {% endblock %}
 
 {% block head %}
 <style>
+  @media (max-width: 980px) {
+    body.physical-scroll-fix {
+      height: var(--app-viewport-height);
+      overflow: hidden;
+    }
+    body.physical-scroll-fix .app-shell {
+      height: var(--app-viewport-height);
+      min-height: var(--app-viewport-height);
+      overflow: hidden;
+    }
+    body.physical-scroll-fix .main-pane {
+      min-height: 0;
+      height: var(--app-viewport-height);
+      overflow: hidden;
+    }
+    body.physical-scroll-fix .page-body {
+      flex: 1 1 auto;
+      min-height: 0;
+      overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
+    }
+  }
+  @media (max-width: 760px) {
+    .page-intro .metric-grid {
+      display: none;
+    }
+  }
+  .physical-cards {
+    display: none;
+  }
   .res-row {
     display: flex;
     justify-content: space-between;
@@ -130,7 +245,84 @@
     font-size: 0.88rem;
   }
   .fw-semibold { font-weight: 600; }
-  progress.progress-warn  { accent-color: #d97706; }
-  progress.progress-danger { accent-color: #dc2626; }
+  .usage-bar {
+    width: 100%;
+    height: 0.65rem;
+    overflow: hidden;
+    border-radius: 999px;
+    background: rgba(148, 163, 184, 0.18);
+  }
+  .usage-bar-fill {
+    height: 100%;
+    border-radius: inherit;
+    background: #2563eb;
+  }
+  .usage-bar-warn {
+    background: #d97706;
+  }
+  .usage-bar-danger {
+    background: #dc2626;
+  }
+  .physical-card {
+    display: grid;
+    gap: 1rem;
+    padding: 1rem;
+    border: 1px solid var(--app-border);
+    border-radius: 1rem;
+    background: #fff;
+    box-shadow: 0 4px 16px rgba(15, 23, 42, 0.06);
+  }
+  .physical-card-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 0.75rem;
+  }
+  .physical-card-title {
+    margin: 0 0 0.2rem;
+    font-size: 1rem;
+  }
+  .physical-card-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.85rem;
+  }
+  .physical-card-item {
+    padding: 0.85rem 0.9rem;
+    border-radius: 0.9rem;
+    background: var(--app-panel-alt);
+    border: 1px solid rgba(148, 163, 184, 0.16);
+  }
+  .physical-card-label {
+    color: var(--app-text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    font-size: 0.68rem;
+    line-height: 1.2;
+  }
+  .physical-card-value {
+    margin-top: 0.35rem;
+    font-weight: 600;
+    color: #0f172a;
+  }
+  .physical-resource-block {
+    display: grid;
+    gap: 0.35rem;
+  }
+  .physical-percent {
+    text-align: right;
+  }
+  @media (max-width: 760px) {
+    .physical-table {
+      display: none;
+    }
+    .physical-cards {
+      display: grid;
+      gap: 0.9rem;
+    }
+    .physical-card-head {
+      align-items: center;
+    }
+  }
 </style>
 {% endblock %}

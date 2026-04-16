@@ -1,57 +1,53 @@
-"""
-/api/* JSON routes — proxy to apiserver and expose job polling for the browser.
-"""
+"""Local JSON API for agent registry, proxying, and operation history."""
 
-import json
-import urllib.error
-import urllib.request
+import uuid
 
-from fastapi import APIRouter, Cookie, Depends, HTTPException, Request, status
+from fastapi.responses import FileResponse
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 
 from auth import get_current_user, require_role
-from config import APISERVER_URL
 import database
+from services.agents import AgentError, AgentRecord
 
 router = APIRouter(prefix="/api")
 
 
-# ---------------------------------------------------------------------------
-# Apiserver proxy helper
-# ---------------------------------------------------------------------------
+def _agent_record(row) -> AgentRecord:
+    return AgentRecord(name=row["name"], url=row["url"])
 
-def _apiserver(method: str, path: str, body: dict = None):
-    url = f"{APISERVER_URL}{path}"
-    data = json.dumps(body).encode() if body else None
-    req = urllib.request.Request(url, data=data, method=method)
-    req.add_header("Content-Type", "application/json")
-    try:
-        with urllib.request.urlopen(req) as resp:
-            raw = resp.read()
-            if not raw:
-                return {}
-            try:
-                return json.loads(raw)
-            except json.JSONDecodeError:
-                return {"raw": raw.decode(errors="replace")}
-    except urllib.error.HTTPError as exc:
-        raw = exc.read()
-        try:
-            detail = json.loads(raw)
-        except Exception:
-            detail = raw.decode(errors="replace")
-        raise HTTPException(status_code=exc.code, detail=detail)
-    except urllib.error.URLError as exc:
-        raise HTTPException(status_code=502,
-                            detail=f"Apiserver unreachable: {exc.reason}")
+
+async def _get_agent_or_404(agent_name: str) -> AgentRecord:
+    row = await database.get_agent(agent_name)
+    if not row:
+        raise HTTPException(status_code=404, detail=f"agent not found: {agent_name}")
+    return _agent_record(row)
+
+
+def _raise_agent_error(exc: AgentError):
+    raise HTTPException(status_code=exc.status_code, detail=exc.detail)
 
 
 # ---------------------------------------------------------------------------
 # Health
 # ---------------------------------------------------------------------------
 
+@router.get("/pki/vm-builder-ca.crt")
+async def get_ca_cert(request: Request):
+    ca_cert = request.app.state.agent_pki["ca_cert"]
+    return FileResponse(
+        ca_cert,
+        media_type="application/x-pem-file",
+        filename="vm-builder-ca.crt",
+    )
+
+
 @router.get("/health")
-async def health():
-    return _apiserver("GET", "/health")
+async def health(request: Request):
+    agents = await database.list_agents()
+    return {
+        "agent_count": len(agents),
+        "reachable_agents": request.app.state.health_monitor.reachable_count(),
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -59,19 +55,36 @@ async def health():
 # ---------------------------------------------------------------------------
 
 @router.get("/agents")
-async def list_agents(user=Depends(get_current_user)):
-    return _apiserver("GET", "/agents")
+async def list_agents(request: Request, user=Depends(get_current_user)):
+    rows = await database.list_agents()
+    return [
+        {
+            "name": row["name"],
+            "url": row["url"],
+            **request.app.state.health_monitor.status(row["name"]),
+        }
+        for row in rows
+    ]
 
 
 @router.post("/agents/register")
 async def register_agent(request: Request, user=Depends(require_role("admin"))):
     body = await request.json()
-    return _apiserver("POST", "/agents", body)
+    name = (body.get("name") or "").strip()
+    url = (body.get("url") or "").strip()
+    if not name or not url:
+        raise HTTPException(status_code=400, detail="name and url are required")
+    await database.upsert_agent(name, url)
+    await request.app.state.health_monitor.refresh_agent({"name": name, "url": url})
+    return {"name": name, "url": url}
 
 
 @router.delete("/agents/{agent_name}")
 async def remove_agent(agent_name: str, user=Depends(require_role("admin"))):
-    return _apiserver("DELETE", f"/agents/{agent_name}")
+    removed = await database.delete_agent(agent_name)
+    if not removed:
+        raise HTTPException(status_code=404, detail=f"agent not found: {agent_name}")
+    return {"name": agent_name, "removed": True}
 
 
 # ---------------------------------------------------------------------------
@@ -79,8 +92,30 @@ async def remove_agent(agent_name: str, user=Depends(require_role("admin"))):
 # ---------------------------------------------------------------------------
 
 @router.get("/vm")
-async def list_all_vms(user=Depends(get_current_user)):
-    return _apiserver("GET", "/vm")
+async def list_all_vms(request: Request, user=Depends(get_current_user)):
+    rows = await database.list_agents()
+    out = []
+    for row in rows:
+        agent = _agent_record(row)
+        agent_status = request.app.state.health_monitor.status(agent.name)
+        item = {"agent_name": agent.name, "reachable": agent_status["reachable"], "vms": []}
+        if agent_status["reachable"]:
+            try:
+                raw_vms = await request.app.state.agent_client.list_vms(agent)
+                item["vms"] = [
+                    {
+                        "agent_name": agent.name,
+                        "id": vm.get("id"),
+                        "name": vm.get("name"),
+                        "state": vm.get("state"),
+                    }
+                    for vm in raw_vms
+                    if isinstance(vm, dict)
+                ]
+            except AgentError as exc:
+                item["error"] = str(exc.detail)
+        out.append(item)
+    return out
 
 
 # ---------------------------------------------------------------------------
@@ -88,89 +123,101 @@ async def list_all_vms(user=Depends(get_current_user)):
 # ---------------------------------------------------------------------------
 
 @router.get("/agents/{agent_name}/vm")
-async def list_vms(agent_name: str, user=Depends(get_current_user)):
-    return _apiserver("GET", f"/agents/{agent_name}/vm")
+async def list_vms(request: Request, agent_name: str, user=Depends(get_current_user)):
+    agent = await _get_agent_or_404(agent_name)
+    try:
+        return await request.app.state.agent_client.list_vms(agent)
+    except AgentError as exc:
+        _raise_agent_error(exc)
 
 
 @router.get("/agents/{agent_name}/vm/{vm_name}")
-async def get_vm(agent_name: str, vm_name: str, user=Depends(get_current_user)):
-    return _apiserver("GET", f"/agents/{agent_name}/vm/{vm_name}")
+async def get_vm(request: Request, agent_name: str, vm_name: str, user=Depends(get_current_user)):
+    agent = await _get_agent_or_404(agent_name)
+    try:
+        return await request.app.state.agent_client.get_vm(agent, vm_name)
+    except AgentError as exc:
+        _raise_agent_error(exc)
 
 
 @router.post("/agents/{agent_name}/vm/create")
 async def create_vm(agent_name: str, request: Request,
                     user=Depends(require_role("admin", "operator"))):
+    agent = await _get_agent_or_404(agent_name)
     body = await request.json()
-    result = _apiserver("POST", f"/agents/{agent_name}/vm/create", body)
-    job_id = result.get("job_id")
-    if job_id:
-        await database.upsert_job(job_id, agent_name, body.get("name", ""), "create")
-    return result
+    try:
+        result = await request.app.state.agent_client.create_vm(agent, body)
+    except AgentError as exc:
+        _raise_agent_error(exc)
+    operation_id = uuid.uuid4().hex
+    await database.create_operation(
+        operation_id,
+        agent_name,
+        result.get("name") or body.get("name", ""),
+        "create",
+        log=result.get("output"),
+    )
+    return {**result, "operation_id": operation_id}
 
 
 @router.delete("/agents/{agent_name}/vm/{vm_name}")
-async def delete_vm(agent_name: str, vm_name: str,
+async def delete_vm(request: Request, agent_name: str, vm_name: str,
                     user=Depends(require_role("admin", "operator"))):
-    result = _apiserver("DELETE", f"/agents/{agent_name}/vm/{vm_name}")
-    job_id = result.get("job_id")
-    if job_id:
-        await database.upsert_job(job_id, agent_name, vm_name, "delete")
-    return result
+    agent = await _get_agent_or_404(agent_name)
+    try:
+        result = await request.app.state.agent_client.delete_vm(agent, vm_name)
+    except AgentError as exc:
+        _raise_agent_error(exc)
+    operation_id = uuid.uuid4().hex
+    await database.create_operation(
+        operation_id,
+        agent_name,
+        result.get("name") or vm_name,
+        "delete",
+        log=result.get("output"),
+    )
+    return {**result, "operation_id": operation_id}
 
 
 @router.post("/agents/{agent_name}/vm/{vm_name}/start")
-async def start_vm(agent_name: str, vm_name: str,
+async def start_vm(request: Request, agent_name: str, vm_name: str,
                    user=Depends(require_role("admin", "operator"))):
-    return _apiserver("POST", f"/agents/{agent_name}/vm/{vm_name}/start")
+    agent = await _get_agent_or_404(agent_name)
+    try:
+        return await request.app.state.agent_client.start_vm(agent, vm_name)
+    except AgentError as exc:
+        _raise_agent_error(exc)
 
 
 @router.post("/agents/{agent_name}/vm/{vm_name}/shutdown")
-async def shutdown_vm(agent_name: str, vm_name: str,
+async def shutdown_vm(request: Request, agent_name: str, vm_name: str,
                       user=Depends(require_role("admin", "operator"))):
-    return _apiserver("POST", f"/agents/{agent_name}/vm/{vm_name}/shutdown")
+    agent = await _get_agent_or_404(agent_name)
+    try:
+        return await request.app.state.agent_client.shutdown_vm(agent, vm_name)
+    except AgentError as exc:
+        _raise_agent_error(exc)
 
 
 # ---------------------------------------------------------------------------
-# Jobs
+# Operations
 # ---------------------------------------------------------------------------
 
-@router.get("/jobs")
-async def list_jobs_api(agent: str = None, vm: str = None,
-                        action: str = None, status: str = None,
-                        user=Depends(get_current_user)):
-    rows = await database.list_jobs(agent_name=agent, vm_name=vm,
-                                    action=action, status=status)
+@router.get("/operations")
+async def list_operations_api(agent: str = None, vm: str = None,
+                              action: str = None,
+                              user=Depends(get_current_user)):
+    rows = await database.list_operations(agent_name=agent, vm_name=vm,
+                                          action=action)
     return [dict(r) for r in rows]
 
 
-@router.get("/jobs/{job_id}")
-async def get_job_api(job_id: str, user=Depends(get_current_user)):
-    row = await database.get_job(job_id)
+@router.get("/operations/{operation_id}")
+async def get_operation_api(operation_id: str, user=Depends(get_current_user)):
+    row = await database.get_operation(operation_id)
     if not row:
-        raise HTTPException(status_code=404, detail="Job not found")
-
-    extra = {}
-
-    # If still pending/running, try to refresh from apiserver
-    if row["status"] in ("pending", "running"):
-        try:
-            result = _apiserver("GET",
-                                f"/agents/{row['agent_name']}/jobs/{job_id}")
-            new_status = result.get("status", row["status"])
-            new_log    = result.get("log") or result.get("output") or row["log"]
-            await database.upsert_job(job_id, row["agent_name"], row["vm_name"],
-                                      row["action"], new_status, new_log)
-            row = await database.get_job(job_id)
-            extra = {
-                "start_time": result.get("start_time"),
-                "end_time": result.get("end_time"),
-                "error": result.get("error"),
-                "error_code": result.get("error_code"),
-            }
-        except HTTPException:
-            pass  # Return what we have
-
-    return {**dict(row), **{k: v for k, v in extra.items() if v is not None}}
+        raise HTTPException(status_code=404, detail="Operation not found")
+    return dict(row)
 
 
 # ---------------------------------------------------------------------------

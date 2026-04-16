@@ -2,36 +2,33 @@
 {% block title %}Agents{% endblock %}
 {% block topbar_title %}<i class="bi bi-cpu me-2"></i>Agents{% endblock %}
 
-{% block topbar_actions %}
-{% if user.role == 'admin' %}
-<button type="button" onclick="openDialog('registerAgentDialog')"><i class="bi bi-plus-lg me-1"></i>Register agent</button>
-{% endif %}
-{% endblock %}
-
 {% block content %}
 <article id="agentAlert" class="flash hidden"></article>
 
-<div class="page-intro">
-  <div>
-    <h1>Agent inventory</h1>
-  </div>
-  <div class="metric-grid" style="min-width:min(24rem, 100%);">
-    <article class="metric-card">
-      <div class="metric-icon"><i class="bi bi-hdd-network"></i></div>
-      <div class="metric-label">Agents</div>
-      <div class="metric-value">{{ agents | length }}</div>
-    </article>
-    <article class="metric-card">
-      <div class="metric-icon"><i class="bi bi-broadcast-pin"></i></div>
-      <div class="metric-label">Reachable</div>
-      <div class="metric-value">{{ agents | selectattr('reachable') | list | length }}</div>
-    </article>
-  </div>
-</div>
-
 <article class="panel">
   {% if agents %}
-  <div class="table-wrap">
+  <div class="panel-header">
+    <h2 class="panel-title"><i class="bi bi-cpu"></i>Agent Inventory</h2>
+    {% if user.role == 'admin' %}
+    <div class="action-menu-shell agents-actions-shell">
+      <button
+        type="button"
+        class="action-menu-toggle agents-actions-toggle"
+        data-agents-actions-toggle
+        aria-label="Open agent actions"
+        aria-expanded="false"
+      >
+        <i class="bi bi-three-dots-vertical"></i>
+      </button>
+      <div class="action-menu agents-actions-menu" data-agents-actions-menu>
+        <button type="button" class="action-menu-btn agents-action-menu-btn" onclick="openDialog('registerAgentDialog')">
+          <i class="bi bi-plus-lg"></i>Register agent
+        </button>
+      </div>
+    </div>
+    {% endif %}
+  </div>
+  <div class="table-wrap agents-table">
     <table>
       <thead>
         <tr>
@@ -40,7 +37,7 @@
           <th>Status</th>
           <th>Last seen</th>
           <th>VMs</th>
-          {% if user.role == 'admin' %}<th class="right">Action</th>{% endif %}
+          {% if user.role == 'admin' %}<th class="agents-actions-col">Actions</th>{% endif %}
         </tr>
       </thead>
       <tbody>
@@ -56,19 +53,91 @@
             <span class="status-pill status-failed"><i class="bi bi-x-octagon"></i>Unreachable</span>
             {% endif %}
           </td>
-          <td class="muted small">{{ agent.get('last_seen', '—') }}</td>
+          <td class="muted small" data-ts="{{ agent.get('last_seen', '') }}">{{ agent.get('last_seen', '—') }}</td>
           <td>{{ agent.get('vm_count', 0) }}</td>
           {% if user.role == 'admin' %}
-          <td class="right">
-            <button type="button" class="btn-ghost-danger" onclick="removeAgent('{{ agent.name }}')">
-              <i class="bi bi-trash me-1"></i>Remove
-            </button>
+          <td class="agents-actions-cell">
+            <div class="action-menu-shell agents-actions-shell">
+              <button
+                type="button"
+                class="action-menu-toggle agents-actions-toggle"
+                data-agents-actions-toggle
+                aria-label="Open agent actions"
+                aria-expanded="false"
+              >
+                <i class="bi bi-three-dots-vertical"></i>
+              </button>
+              <div class="action-menu agents-actions-menu" data-agents-actions-menu>
+                <button
+                  type="button"
+                  class="action-menu-btn action-menu-danger agents-action-menu-btn agents-action-menu-danger"
+                  data-remove-agent
+                  data-agent-name="{{ agent.name | e }}"
+                >
+                  <i class="bi bi-trash"></i>Remove
+                </button>
+              </div>
+            </div>
           </td>
           {% endif %}
         </tr>
         {% endfor %}
       </tbody>
     </table>
+  </div>
+
+  <div class="agents-cards">
+    {% for agent in agents %}
+    {% set reachable = agent.get('reachable', False) %}
+    <article class="agent-card">
+      <div class="agent-card-head">
+        <div>
+          <h2 class="agent-card-title"><i class="bi bi-server me-1 muted"></i>{{ agent.name }}</h2>
+          <div class="mono small muted">{{ agent.get('url', '—') }}</div>
+        </div>
+        <div class="agent-card-head-side">
+          {% if reachable %}
+          <span class="status-pill status-running"><i class="bi bi-check-circle"></i>Reachable</span>
+          {% else %}
+          <span class="status-pill status-failed"><i class="bi bi-x-octagon"></i>Unreachable</span>
+          {% endif %}
+          {% if user.role == 'admin' %}
+          <div class="action-menu-shell agents-actions-shell">
+            <button
+              type="button"
+              class="action-menu-toggle agents-actions-toggle"
+              data-agents-actions-toggle
+              aria-label="Open agent actions"
+              aria-expanded="false"
+            >
+              <i class="bi bi-three-dots-vertical"></i>
+            </button>
+            <div class="action-menu agents-actions-menu" data-agents-actions-menu>
+              <button
+                type="button"
+                class="action-menu-btn action-menu-danger agents-action-menu-btn agents-action-menu-danger"
+                data-remove-agent
+                data-agent-name="{{ agent.name | e }}"
+              >
+                <i class="bi bi-trash"></i>Remove
+              </button>
+            </div>
+          </div>
+          {% endif %}
+        </div>
+      </div>
+      <div class="agent-card-grid">
+        <div class="agent-card-item">
+          <div class="agent-card-label">Last seen</div>
+          <div class="agent-card-value muted small" data-ts="{{ agent.get('last_seen', '') }}">{{ agent.get('last_seen', '—') }}</div>
+        </div>
+        <div class="agent-card-item">
+          <div class="agent-card-label">VMs</div>
+          <div class="agent-card-value">{{ agent.get('vm_count', 0) }}</div>
+        </div>
+      </div>
+    </article>
+    {% endfor %}
   </div>
   {% else %}
   <article class="empty-state">
@@ -83,7 +152,7 @@
 <dialog id="registerAgentDialog">
   <article style="margin:0;">
     <div class="dialog-header">
-      <h3 class="dialog-title"><i class="bi bi-plus-square me-1"></i>Register agent</h3>
+      <h3 class="dialog-title"><i class="bi bi-plus-square me-2"></i>Register agent</h3>
       <button type="button" class="dialog-close" onclick="closeDialog('registerAgentDialog')"><i class="bi bi-x-lg"></i></button>
     </div>
     <label for="agentName">Name</label>
@@ -96,12 +165,232 @@
     </div>
   </article>
 </dialog>
+
+<dialog id="removeAgentDialog">
+  <article style="margin:0;">
+    <div class="dialog-header">
+      <h3 class="dialog-title"><i class="bi bi-exclamation-octagon me-2"></i>Remove agent</h3>
+      <button type="button" class="dialog-close" onclick="closeRemoveAgentDialog()"><i class="bi bi-x-lg"></i></button>
+    </div>
+    <p>This will remove <strong id="removeAgentNameText">this agent</strong> from the dashboard. Type the agent name to confirm.</p>
+    <input type="text" id="removeAgentConfirmInput" placeholder="" autocomplete="off">
+    <div class="dialog-footer">
+      <button type="button" class="secondary" onclick="closeRemoveAgentDialog()">Cancel</button>
+      <button type="button" id="btnConfirmRemoveAgent" class="agents-danger-btn" disabled onclick="confirmRemoveAgent()">
+        <i class="bi bi-trash me-1"></i>Remove
+      </button>
+    </div>
+  </article>
+</dialog>
 {% endif %}
 {% endblock %}
 
+{% block head %}
+<style>
+  .agents-cards {
+    display: none;
+  }
+  .agent-card {
+    display: grid;
+    gap: 0.9rem;
+    padding: 1rem;
+    border: 1px solid var(--app-border);
+    border-radius: 1rem;
+    background: #fff;
+    box-shadow: 0 4px 16px rgba(15, 23, 42, 0.06);
+  }
+  .agent-card-head {
+    display: flex;
+    justify-content: space-between;
+    gap: 0.75rem;
+    align-items: flex-start;
+  }
+  .agent-card-head-side {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.55rem;
+    flex-shrink: 0;
+  }
+  .agent-card-title {
+    margin: 0 0 0.25rem;
+    font-size: 1rem;
+  }
+  .agents-actions-col {
+    width: 1%;
+    white-space: nowrap;
+  }
+  .agents-actions-cell {
+    text-align: right;
+  }
+  @media (min-width: 761px) {
+    .agents-table {
+      overflow: visible;
+    }
+  }
+  .agent-card-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.75rem;
+  }
+  .agent-card-item {
+    padding: 0.8rem 0.9rem;
+    border-radius: 0.9rem;
+    background: var(--app-panel-alt);
+    border: 1px solid rgba(148, 163, 184, 0.16);
+  }
+  .agent-card-label {
+    color: var(--app-text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    font-size: 0.68rem;
+  }
+  .agent-card-value {
+    margin-top: 0.3rem;
+    font-weight: 600;
+    color: #0f172a;
+  }
+  .agents-danger-btn {
+    background: #dc2626;
+    border-color: #dc2626;
+    color: #fff;
+  }
+  .agents-danger-btn:hover {
+    background: #b91c1c;
+    border-color: #b91c1c;
+  }
+  .agents-danger-btn:disabled {
+    background: #fca5a5;
+    border-color: #fca5a5;
+    color: #fff;
+    cursor: not-allowed;
+    opacity: 1;
+  }
+  @media (max-width: 760px) {
+    .agents-table {
+      display: none;
+    }
+    .agents-cards {
+      display: grid;
+      gap: 0.9rem;
+    }
+    .agent-card-head,
+    .agent-card-head-side {
+      align-items: center;
+    }
+    .agent-card .mono.small {
+      font-size: 0.66rem;
+    }
+  }
+</style>
+{% endblock %}
+
 {% block scripts %}
-{% if user.role == 'admin' %}
 <script>
+function timeAgo(isoStr) {
+  if (!isoStr) return '—';
+  const normalized = /(?:Z|[+-]\d{2}:\d{2})$/.test(isoStr) ? isoStr : `${isoStr}Z`;
+  const d = new Date(normalized);
+  const secs = Math.floor((Date.now() - d.getTime()) / 1000);
+  if (isNaN(secs) || secs < 0) return isoStr;
+  if (secs < 60) return `${secs}s ago`;
+  const mins = Math.floor(secs / 60);
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  const days = Math.floor(hrs / 24);
+  return `${days}d ago`;
+}
+
+document.querySelectorAll('[data-ts]').forEach((el) => {
+  el.textContent = timeAgo(el.dataset.ts);
+});
+
+{% if user.role == 'admin' %}
+let openAgentsMenu = null;
+let pendingRemoveAgentName = '';
+
+document.querySelectorAll('[data-agents-actions-toggle]').forEach((toggle) => {
+  toggle.addEventListener('click', (event) => {
+    event.stopPropagation();
+    const shell = toggle.closest('.agents-actions-shell');
+    const menu = shell ? shell.querySelector('[data-agents-actions-menu]') : null;
+    if (!menu) return;
+    const willOpen = !menu.classList.contains('is-open');
+    if (openAgentsMenu && openAgentsMenu !== menu) {
+      openAgentsMenu.classList.remove('is-open');
+      openAgentsMenu.parentElement?.querySelector('[data-agents-actions-toggle]')?.setAttribute('aria-expanded', 'false');
+    }
+    menu.classList.toggle('is-open', willOpen);
+    toggle.setAttribute('aria-expanded', willOpen ? 'true' : 'false');
+    openAgentsMenu = willOpen ? menu : null;
+  });
+});
+
+document.addEventListener('click', (event) => {
+  if (!openAgentsMenu) return;
+  const shell = openAgentsMenu.closest('.agents-actions-shell');
+  if (shell && !shell.contains(event.target)) {
+    openAgentsMenu.classList.remove('is-open');
+    shell.querySelector('[data-agents-actions-toggle]')?.setAttribute('aria-expanded', 'false');
+    openAgentsMenu = null;
+  }
+});
+
+document.querySelectorAll('[data-remove-agent]').forEach((button) => {
+  button.addEventListener('click', (event) => {
+    event.stopPropagation();
+    const shell = button.closest('.agents-actions-shell');
+    const menu = shell ? shell.querySelector('[data-agents-actions-menu]') : null;
+    const toggle = shell ? shell.querySelector('[data-agents-actions-toggle]') : null;
+    if (menu) {
+      menu.classList.remove('is-open');
+    }
+    if (toggle) {
+      toggle.setAttribute('aria-expanded', 'false');
+    }
+    openAgentsMenu = null;
+    openRemoveAgentDialog(button.dataset.agentName || '');
+  });
+});
+
+const removeAgentConfirmInput = document.getElementById('removeAgentConfirmInput');
+const removeAgentNameText = document.getElementById('removeAgentNameText');
+const btnConfirmRemoveAgent = document.getElementById('btnConfirmRemoveAgent');
+
+if (removeAgentConfirmInput && btnConfirmRemoveAgent) {
+  removeAgentConfirmInput.addEventListener('input', () => {
+    btnConfirmRemoveAgent.disabled = removeAgentConfirmInput.value !== pendingRemoveAgentName;
+  });
+}
+
+function openRemoveAgentDialog(name) {
+  pendingRemoveAgentName = name;
+  if (removeAgentNameText) {
+    removeAgentNameText.textContent = name || 'this agent';
+  }
+  if (removeAgentConfirmInput) {
+    removeAgentConfirmInput.value = '';
+    removeAgentConfirmInput.placeholder = name || '';
+  }
+  if (btnConfirmRemoveAgent) {
+    btnConfirmRemoveAgent.disabled = true;
+  }
+  openDialog('removeAgentDialog');
+  removeAgentConfirmInput?.focus();
+}
+
+function closeRemoveAgentDialog() {
+  pendingRemoveAgentName = '';
+  if (removeAgentConfirmInput) {
+    removeAgentConfirmInput.value = '';
+    removeAgentConfirmInput.placeholder = '';
+  }
+  if (btnConfirmRemoveAgent) {
+    btnConfirmRemoveAgent.disabled = true;
+  }
+  closeDialog('removeAgentDialog');
+}
+
 async function registerAgent() {
   const name = document.getElementById('agentName').value.trim();
   const url = document.getElementById('agentUrl').value.trim();
@@ -120,16 +409,18 @@ async function registerAgent() {
   }
 }
 
-async function removeAgent(name) {
-  if (!confirm(`Remove agent "${name}"?`)) return;
+async function confirmRemoveAgent() {
+  if (!pendingRemoveAgentName) return;
   const alert = document.getElementById('agentAlert');
   try {
-    await apiFetch(`/api/agents/${encodeURIComponent(name)}`, 'DELETE');
+    await apiFetch(`/api/agents/${encodeURIComponent(pendingRemoveAgentName)}`, 'DELETE');
+    closeRemoveAgentDialog();
     location.reload();
   } catch (e) {
+    closeRemoveAgentDialog();
     showInlineAlert(alert, 'danger', e.message || 'Failed to remove agent.');
   }
 }
-</script>
 {% endif %}
+</script>
 {% endblock %}
