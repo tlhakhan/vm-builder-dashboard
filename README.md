@@ -1,31 +1,49 @@
 # vm-builder-dashboard
 
-A lightweight web dashboard for managing homelab virtual machines. It now includes the control-plane functionality that used to live in `vm-builder-apiserver`, providing both the browser UI and the backend agent registry / proxy layer in one FastAPI app.
+A lightweight web dashboard for managing virtual machines across one or more hypervisors in a homelab.
 
 Built with FastAPI, Jinja2, PicoCSS, and vanilla JS. No frontend build step.
 
 ---
 
+## Why use it?
+
+`vm-builder-dashboard` is meant for small self-hosted environments where you want a simple control plane without adding a heavy management stack.
+
+It gives you:
+
+- a clean web UI for browsing hosts and VMs
+- a central place to create, start, stop, and delete VMs
+- per-VM operation history with captured output
+- basic multi-user access with admin / operator / viewer roles
+- mTLS support for talking securely to your `vm-builder-agent` nodes
+
+If you already have a few machines in your lab and want one place to operate them, this project is designed to be easy to try and easy to run.
+
+---
+
 ## Features
 
-- **Physical view** — per-host CPU, memory, and disk utilisation with progress bars
-- **Virtual view** — all VMs across all agents in one table; create VMs from the UI
-- **VM detail** — specs, state controls (start / shutdown), past operation output, and delete
-- **Operation history** — synchronous create/delete output captured locally and shown per VM
-- **Agents** — register and remove hypervisor agents
-- **Users** — admin-managed accounts with viewer / operator / admin roles; self-signup with approval flow
-- **Server-side sessions** — `HttpOnly` cookie, stored in SQLite, fully revocable
+- **Hypervisors view** — per-host CPU, memory, disk, and VM counts
+- **Virtual Machines view** — all VMs across all registered agents in one inventory
+- **VM detail view** — specs, power actions, captured operation output, and destructive actions
+- **Operation history** — synchronous create/delete output stored locally and shown per VM
+- **Agent management** — register and remove `vm-builder-agent` nodes from the UI
+- **User management** — built-in admin / operator / viewer roles with self-signup approval flow
+- **Server-side sessions** — `HttpOnly` cookie auth with revocable sessions in SQLite
+- **Built-in PKI** — generates a local CA and client certificate for agent mTLS
+- **No frontend build pipeline** — just Python, templates, CSS, and a small amount of JS
 
 ---
 
 ## Requirements
 
 - Python 3.11+
-- Reachable `vm-builder-agent` instances over HTTP or HTTPS
+- One or more reachable `vm-builder-agent` instances over HTTP or HTTPS
 
 ---
 
-## Installation
+## Quick Start
 
 ```bash
 git clone https://github.com/tenzin-lhakhang/vm-builder-dashboard
@@ -41,21 +59,36 @@ pip install -r requirements.txt
 python cli.py create-user --username admin --role admin
 ```
 
----
-
-## Running
+### Start the dashboard
 
 ```bash
 uvicorn main:app --host 0.0.0.0 --port 8081
 ```
 
-### Environment variables
+Then open the dashboard in your browser and register your agents from the `Agents` page.
+
+---
+
+## Running In A Homelab
+
+For a typical homelab setup:
+
+1. Run `vm-builder-dashboard` on a small always-on node.
+2. Run `vm-builder-agent` on each hypervisor you want to manage.
+3. Download or copy the generated CA certificate from the dashboard to each agent host.
+4. Register each agent in the dashboard UI.
+
+Once that is done, the dashboard becomes your central view for hosts, VMs, and day-to-day operations.
+
+---
+
+## Environment variables
 
 | Variable | Default | Description |
 |---|---|---|
 | `SECRET_KEY` | `dev-secret-change-me` | Secret used to sign session tokens — **change in production** |
 | `DB_PATH` | `/var/lib/vm-builder-dashboard/db.sqlite3` | Path to the SQLite database file |
-| `AGENT_PKI_DIR` | `/var/lib/vm-builder-dashboard/pki` | Directory containing the generated CA and `vm-builder-apiserver` client certificate |
+| `AGENT_PKI_DIR` | `/var/lib/vm-builder-dashboard/pki` | Directory containing the generated CA and dashboard client certificate |
 | `AGENT_HEALTH_INTERVAL` | `10` | Seconds between background agent health checks |
 | `AGENT_TIMEOUT_SECONDS` | `30` | Timeout for proxied agent API calls |
 | `AGENT_HEALTH_TIMEOUT_SECONDS` | `5` | Timeout for background `/health` checks |
@@ -68,7 +101,7 @@ On startup the app generates these files in `AGENT_PKI_DIR` if they do not alrea
 - `vm-builder-apiserver.key`
 - `vm-builder-apiserver.crt`
 
-Distribute `AGENT_PKI_DIR/vm-builder-ca.crt` to agents as the CA they should trust for the dashboard's client certificate.
+Distribute `AGENT_PKI_DIR/vm-builder-ca.crt` to agent hosts as the CA they should trust for the dashboard's client certificate.
 
 The same CA cert is also served over HTTP at `/api/pki/vm-builder-ca.crt`.
 
@@ -82,30 +115,30 @@ See [docs/README.md](docs/README.md) for CLI usage and systemd service installat
 
 ## Project structure
 
-```
+```text
 ├── main.py              # FastAPI app and startup hooks
 ├── cli.py               # Admin CLI for user creation and password reset
 ├── config.py            # Env-var settings
 ├── auth.py              # Password hashing, session management, role deps
 ├── database.py          # aiosqlite async database layer
 ├── routers/
-│   ├── api.py           # /api/* JSON endpoints (agent registry + proxy + operation history)
+│   ├── api.py           # /api/* JSON endpoints
 │   └── views.py         # HTML page routes
 ├── services/
-│   ├── agents.py        # Outbound vm-builder-agent client and response normalization
-│   ├── health.py        # Background reachability tracking for registered agents
+│   ├── agents.py        # Outbound vm-builder-agent client
+│   ├── health.py        # Background agent reachability tracking
 │   └── pki.py           # Local CA and client certificate generation
 ├── templates/
 │   ├── base.html        # Shell layout, sidebar, global styles
-│   ├── physical.html    # Physical infrastructure table
-│   ├── virtual.html     # VM list + create VM dialog
-│   ├── vm_detail.html   # VM specs, controls, past operations
+│   ├── physical.html    # Hypervisor inventory
+│   ├── virtual.html     # VM inventory + create VM dialog
+│   ├── vm_detail.html   # VM specs, controls, and operation history
 │   ├── agents.html      # Agent inventory
-│   ├── users.html       # User management (admin only)
+│   ├── users.html       # User management
 │   ├── login.html       # Login page
-│   └── signup.html      # Self-signup page
+│   └── signup.html      # Request access page
 └── static/
-    └── app.js           # apiFetch, dialogs, tabs, inline alerts
+    └── app.js           # Shared frontend helpers
 ```
 
 ---
