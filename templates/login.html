@@ -2,7 +2,7 @@
 <html lang="en" data-theme="light">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <meta name="color-scheme" content="light">
   <title>Login — VM Builder</title>
   <link rel="stylesheet"
@@ -18,9 +18,15 @@
       --auth-border: rgba(148, 163, 184, 0.22);
       --auth-accent: #2563eb;
       --auth-accent-soft: rgba(37, 99, 235, 0.10);
+      --auth-min-height: 100vh;
+    }
+    @supports (min-height: 100dvh) {
+      :root {
+        --auth-min-height: 100dvh;
+      }
     }
     body {
-      min-height: 100vh;
+      min-height: var(--auth-min-height);
       margin: 0;
       display: grid;
       place-items: center;
@@ -31,6 +37,13 @@
         radial-gradient(circle at bottom right, rgba(16, 185, 129, 0.07), transparent 24%),
         #f1f5f9;
     }
+    html,
+    body {
+      overflow: hidden;
+      touch-action: none;
+      height: 100%;
+      width: 100%;
+    }
     .auth-page {
       width: 100%;
       display: grid;
@@ -38,7 +51,7 @@
       padding: 1rem;
     }
     .auth-shell {
-      width: min(34rem, calc(100vw - 1.5rem));
+      width: min(34rem, calc(100vw - 2rem));
       border: 1px solid var(--auth-border);
       border-radius: 1.7rem;
       background:
@@ -90,11 +103,11 @@
       max-width: 26rem;
     }
     .auth-form-shell {
-      padding: 1.2rem;
-      border: 1px solid rgba(148, 163, 184, 0.18);
+      padding: 0;
+      border: none;
       border-radius: 1.2rem;
-      background: rgba(255, 255, 255, 0.88);
-      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.9);
+      background: transparent;
+      box-shadow: none;
     }
     .auth-form-head {
       margin-bottom: 1.15rem;
@@ -143,6 +156,17 @@
     }
     .muted {
       color: var(--auth-muted);
+    }
+    @media (max-width: 576px) {
+      body {
+        place-items: start center;
+      }
+      .auth-shell input,
+      .auth-shell button,
+      .auth-shell select,
+      .auth-shell textarea {
+        font-size: 16px;
+      }
     }
   </style>
 </head>

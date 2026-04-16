@@ -2,7 +2,7 @@
 <html lang="en" data-theme="light">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <meta name="color-scheme" content="light">
   <title>Request Access — VM Builder</title>
   <link rel="stylesheet"
@@ -13,6 +13,13 @@
     :root {
       --pico-font-size: 95%;
       --pico-border-radius: 1rem;
+    }
+    html,
+    body {
+      overflow: hidden;
+      touch-action: none;
+      height: 100%;
+      width: 100%;
     }
     body {
       min-height: 100vh;
@@ -30,9 +37,46 @@
       border-radius: 1.5rem;
       background: #ffffff;
       box-shadow: 0 16px 48px rgba(15, 23, 42, 0.10);
+      padding: 2.15rem;
     }
     .auth-panel {
-      padding: 2rem;
+      padding: 0;
+      margin: 0;
+    }
+    .auth-hero {
+      display: grid;
+      gap: 0.75rem;
+      margin-bottom: 1.35rem;
+    }
+    .auth-brand {
+      display: flex;
+      align-items: center;
+      gap: 0.95rem;
+    }
+    .auth-mark {
+      width: 3.5rem;
+      height: 3.5rem;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 1.1rem;
+      background:
+        linear-gradient(145deg, rgba(37, 99, 235, 0.14), rgba(14, 165, 233, 0.10));
+      color: #2563eb;
+      border: 1px solid rgba(37, 99, 235, 0.18);
+      font-size: 1.45rem;
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.7);
+    }
+    .auth-title {
+      margin: 0 0 0.25rem;
+      color: #0f172a;
+      font-size: 2rem;
+      line-height: 1.05;
+    }
+    .auth-subtitle {
+      margin: 0;
+      color: #475569;
+      max-width: 26rem;
     }
     .input-icon {
       position: relative;
@@ -64,14 +108,35 @@
     .muted {
       color: #64748b;
     }
+    @media (max-width: 576px) {
+      body {
+        place-items: start center;
+        padding: 1rem;
+      }
+      .auth-shell input,
+      .auth-shell button,
+      .auth-shell select,
+      .auth-shell textarea {
+        font-size: 16px;
+      }
+    }
   </style>
 </head>
 <body>
 <main class="auth-shell">
   <section class="auth-panel">
+    <div class="auth-hero">
+      <div class="auth-brand">
+        <span class="auth-mark"><i class="bi bi-hdd-rack"></i></span>
+        <div>
+          <h1 class="auth-title">VM Builder</h1>
+        </div>
+      </div>
+      <p class="auth-subtitle">Create a pending account for admin approval.</p>
+    </div>
+
     <div style="margin-bottom:1.25rem;">
       <h2 style="margin-bottom:0.25rem;">Request access</h2>
-      <p style="margin-bottom:0; color:#94a3b8;">Create a pending account for admin approval.</p>
     </div>
 
     {% if success %}
