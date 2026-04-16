@@ -6,7 +6,6 @@
 <article id="agentAlert" class="flash hidden"></article>
 
 <article class="panel">
-  {% if agents %}
   <div class="panel-header">
     <h2 class="panel-title"><i class="bi bi-cpu"></i>Agent Inventory</h2>
     {% if user.role == 'admin' %}
@@ -28,6 +27,7 @@
     </div>
     {% endif %}
   </div>
+  {% if agents %}
   <div class="table-wrap agents-table">
     <table>
       <thead>
