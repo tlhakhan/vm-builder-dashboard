@@ -274,5 +274,21 @@ async def update_role_api(user_id: int, request: Request,
 
 @router.post("/users/{user_id}/deactivate")
 async def deactivate_user_api(user_id: int, user=Depends(require_role("admin"))):
+    if user["user_id"] == user_id:
+        raise HTTPException(status_code=400, detail="You cannot deactivate yourself")
     await database.deactivate_user(user_id)
+    return {"ok": True}
+
+
+@router.post("/users/{user_id}/reactivate")
+async def reactivate_user_api(user_id: int, user=Depends(require_role("admin"))):
+    await database.reactivate_user(user_id)
+    return {"ok": True}
+
+
+@router.delete("/users/{user_id}")
+async def delete_user_api(user_id: int, user=Depends(require_role("admin"))):
+    if user["user_id"] == user_id:
+        raise HTTPException(status_code=400, detail="You cannot delete yourself")
+    await database.delete_user_permanently(user_id)
     return {"ok": True}

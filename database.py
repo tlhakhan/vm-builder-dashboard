@@ -134,6 +134,26 @@ async def deactivate_user(user_id: int):
         await db.execute(
             "UPDATE users SET status = 'rejected' WHERE id = ?", (user_id,)
         )
+        await db.execute("DELETE FROM sessions WHERE user_id = ?", (user_id,))
+        await db.commit()
+
+
+async def reactivate_user(user_id: int):
+    async with _connect() as db:
+        await db.execute(
+            "UPDATE users SET status = 'active' WHERE id = ? AND status = 'rejected'",
+            (user_id,),
+        )
+        await db.commit()
+
+
+async def delete_user_permanently(user_id: int):
+    async with _connect() as db:
+        await db.execute("DELETE FROM sessions WHERE user_id = ?", (user_id,))
+        await db.execute(
+            "DELETE FROM users WHERE id = ? AND status = 'rejected'",
+            (user_id,),
+        )
         await db.commit()
 
 
@@ -158,6 +178,7 @@ async def get_session(token: str):
                FROM sessions s
                JOIN users u ON u.id = s.user_id
                WHERE s.token = ?
+                 AND u.status = 'active'
                  AND s.expires_at > datetime('now')""",
             (token,),
         )

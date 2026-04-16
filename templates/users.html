@@ -13,6 +13,10 @@
     <i class="bi bi-hourglass-split me-1"></i>Pending
     {% if pending_users %}<span class="soft-pill">{{ pending_users | length }}</span>{% endif %}
   </button>
+  <button type="button" class="secondary tab-button users-tab-button" data-tab-target="deactivatedPane">
+    <i class="bi bi-person-x me-1"></i>Deactivated
+    {% if deactivated_users %}<span class="soft-pill">{{ deactivated_users | length }}</span>{% endif %}
+  </button>
 </div>
 
 <section id="activePane" class="tab-panel">
@@ -276,6 +280,125 @@
   </article>
 </section>
 
+<section id="deactivatedPane" class="tab-panel" hidden>
+  <article class="panel">
+    {% if deactivated_users %}
+    <div class="panel-header">
+      <h2 class="panel-title"><i class="bi bi-person-x"></i>Deactivated Users</h2>
+    </div>
+    <div class="table-wrap users-deactivated-table">
+      <table>
+        <thead>
+          <tr>
+            <th>Username</th>
+            <th>Role</th>
+            <th>Created</th>
+            <th class="right">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for u in deactivated_users %}
+          <tr>
+            <td><strong>{{ u.username }}</strong></td>
+            <td><span class="role-pill role-{{ u.role if u.role in ('admin','operator','viewer') else 'viewer' }}">{{ u.role }}</span></td>
+            <td class="muted small" data-ts="{{ u.created_at }}">{{ u.created_at }}</td>
+            <td class="users-actions-cell">
+              <div class="action-menu-shell users-actions-shell">
+                <button
+                  type="button"
+                  class="action-menu-toggle users-actions-toggle"
+                  data-users-actions-toggle
+                  aria-label="Open user actions"
+                  aria-expanded="false"
+                >
+                  <i class="bi bi-three-dots-vertical"></i>
+                </button>
+                <div class="action-menu users-actions-menu" data-users-actions-menu>
+                  <button
+                    type="button"
+                    class="action-menu-btn action-menu-success users-action-menu-btn users-action-menu-success"
+                    data-user-action="reactivate"
+                    data-user-id="{{ u.id }}"
+                    data-username="{{ u.username | e }}"
+                  >
+                    <i class="bi bi-arrow-counterclockwise"></i>Re-activate
+                  </button>
+                  <button
+                    type="button"
+                    class="action-menu-btn action-menu-danger users-action-menu-btn users-action-menu-danger"
+                    data-user-action="delete-permanently"
+                    data-user-id="{{ u.id }}"
+                    data-username="{{ u.username | e }}"
+                  >
+                    <i class="bi bi-trash"></i>Delete
+                  </button>
+                </div>
+              </div>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div class="users-deactivated-cards">
+      {% for u in deactivated_users %}
+      <article class="user-card">
+        <div class="user-card-head">
+          <div class="user-card-heading">
+            <h2 class="user-card-title">{{ u.username }}</h2>
+          </div>
+          <div class="user-card-head-side">
+            <span class="role-pill role-{{ u.role if u.role in ('admin','operator','viewer') else 'viewer' }}">{{ u.role }}</span>
+            <div class="action-menu-shell users-actions-shell">
+              <button
+                type="button"
+                class="action-menu-toggle users-actions-toggle"
+                data-users-actions-toggle
+                aria-label="Open user actions"
+                aria-expanded="false"
+              >
+                <i class="bi bi-three-dots-vertical"></i>
+              </button>
+              <div class="action-menu users-actions-menu" data-users-actions-menu>
+                <button
+                  type="button"
+                  class="action-menu-btn action-menu-success users-action-menu-btn users-action-menu-success"
+                  data-user-action="reactivate"
+                  data-user-id="{{ u.id }}"
+                  data-username="{{ u.username | e }}"
+                >
+                  <i class="bi bi-arrow-counterclockwise"></i>Re-activate
+                </button>
+                <button
+                  type="button"
+                  class="action-menu-btn action-menu-danger users-action-menu-btn users-action-menu-danger"
+                  data-user-action="delete-permanently"
+                  data-user-id="{{ u.id }}"
+                  data-username="{{ u.username | e }}"
+                >
+                  <i class="bi bi-trash"></i>Delete
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="user-card-item">
+          <div class="user-card-label">Created</div>
+          <div class="muted small" data-ts="{{ u.created_at }}">{{ u.created_at }}</div>
+        </div>
+      </article>
+      {% endfor %}
+    </div>
+    {% else %}
+    <article class="empty-state">
+      <div class="empty-icon"><i class="bi bi-person-x"></i></div>
+      <h3>No deactivated users</h3>
+      <p>Users you deactivate will appear here for reactivation or permanent deletion.</p>
+    </article>
+    {% endif %}
+  </article>
+</section>
+
 <dialog id="approveDialog">
   <article style="margin:0;">
     <div class="dialog-header">
@@ -339,6 +462,54 @@
     </div>
   </article>
 </dialog>
+
+<dialog id="reactivateUserDialog">
+  <article style="margin:0;">
+    <div class="dialog-header">
+      <h3 class="dialog-title"><i class="bi bi-arrow-counterclockwise me-2"></i>Re-activate user</h3>
+      <button type="button" class="dialog-close" onclick="closeReactivateUserDialog()"><i class="bi bi-x-lg"></i></button>
+    </div>
+    <p>Re-activate <strong id="reactivateUserNameText">this user</strong>?</p>
+    <input type="hidden" id="reactivateUserId">
+    <div class="dialog-footer">
+      <button type="button" class="secondary" onclick="closeReactivateUserDialog()">Cancel</button>
+      <button type="button" onclick="confirmReactivateUser()"><i class="bi bi-arrow-counterclockwise me-1"></i>Re-activate</button>
+    </div>
+  </article>
+</dialog>
+
+<dialog id="deactivateUserDialog">
+  <article style="margin:0;">
+    <div class="dialog-header">
+      <h3 class="dialog-title"><i class="bi bi-person-slash me-2"></i>Deactivate user</h3>
+      <button type="button" class="dialog-close" onclick="closeDeactivateUserDialog()"><i class="bi bi-x-lg"></i></button>
+    </div>
+    <p>Deactivate <strong id="deactivateUserNameText">this user</strong>?</p>
+    <input type="hidden" id="deactivateUserId">
+    <div class="dialog-footer">
+      <button type="button" class="secondary" onclick="closeDeactivateUserDialog()">Cancel</button>
+      <button type="button" class="users-danger-btn" onclick="confirmDeactivateUser()"><i class="bi bi-person-slash me-1"></i>Deactivate</button>
+    </div>
+  </article>
+</dialog>
+
+<dialog id="deleteUserDialog">
+  <article style="margin:0;">
+    <div class="dialog-header">
+      <h3 class="dialog-title"><i class="bi bi-exclamation-octagon me-2"></i>Delete user</h3>
+      <button type="button" class="dialog-close" onclick="closeDeleteUserDialog()"><i class="bi bi-x-lg"></i></button>
+    </div>
+    <p>This will permanently delete <strong id="deleteUserNameText">this user</strong>. Type the username to confirm.</p>
+    <input type="hidden" id="deleteUserId">
+    <input type="text" id="deleteUserConfirmInput" placeholder="" autocomplete="off">
+    <div class="dialog-footer">
+      <button type="button" class="secondary" onclick="closeDeleteUserDialog()">Cancel</button>
+      <button type="button" id="btnConfirmDeleteUser" class="users-danger-btn" disabled onclick="confirmDeleteUser()">
+        <i class="bi bi-trash me-1"></i>Delete permanently
+      </button>
+    </div>
+  </article>
+</dialog>
 {% endblock %}
 
 {% block head %}
@@ -371,7 +542,8 @@
     margin-left: 0.2rem;
   }
   .users-active-cards,
-  .users-pending-cards {
+  .users-pending-cards,
+  .users-deactivated-cards {
     display: none;
   }
   .user-card {
@@ -407,7 +579,8 @@
   }
   @media (min-width: 761px) {
     .users-active-table,
-    .users-pending-table {
+    .users-pending-table,
+    .users-deactivated-table {
       overflow: visible;
     }
   }
@@ -424,7 +597,19 @@
     font-size: 0.68rem;
     margin-bottom: 0.25rem;
   }
+  .users-danger-btn {
+    background: #dc2626;
+    border-color: #dc2626;
+    color: #fff;
+  }
+  .users-danger-btn:hover {
+    background: #b91c1c;
+    border-color: #b91c1c;
+  }
   @media (max-width: 760px) {
+    .dialog-footer {
+      flex-wrap: wrap;
+    }
     .users-tabs {
       flex-wrap: nowrap;
       overflow-x: auto;
@@ -439,11 +624,13 @@
       white-space: nowrap;
     }
     .users-active-table,
-    .users-pending-table {
+    .users-pending-table,
+    .users-deactivated-table {
       display: none;
     }
     .users-active-cards,
-    .users-pending-cards {
+    .users-pending-cards,
+    .users-deactivated-cards {
       display: grid;
       gap: 0.9rem;
     }
@@ -458,6 +645,16 @@
 {% block scripts %}
 <script>
 const usersAlert = document.getElementById('usersAlert');
+const deactivateUserIdInput = document.getElementById('deactivateUserId');
+const deactivateUserNameText = document.getElementById('deactivateUserNameText');
+const reactivateUserIdInput = document.getElementById('reactivateUserId');
+const reactivateUserNameText = document.getElementById('reactivateUserNameText');
+const deleteUserIdInput = document.getElementById('deleteUserId');
+const deleteUserNameText = document.getElementById('deleteUserNameText');
+const deleteUserConfirmInput = document.getElementById('deleteUserConfirmInput');
+const btnConfirmDeleteUser = document.getElementById('btnConfirmDeleteUser');
+
+let pendingDeleteUsername = '';
 
 setupTabs();
 
@@ -534,7 +731,15 @@ document.querySelectorAll('[data-user-action]').forEach((button) => {
       return;
     }
     if (action === 'deactivate') {
-      await deactivateUser(userId, username);
+      openDeactivateUserDialog(userId, username);
+      return;
+    }
+    if (action === 'reactivate') {
+      openReactivateUserDialog(userId, username);
+      return;
+    }
+    if (action === 'delete-permanently') {
+      openDeleteUserDialog(userId, username);
       return;
     }
     if (action === 'approve') {
@@ -594,13 +799,85 @@ async function saveRole() {
   }
 }
 
-async function deactivateUser(userId, username) {
-  if (!confirm(`Deactivate user "${username}"?`)) return;
+function openDeactivateUserDialog(userId, username) {
+  deactivateUserIdInput.value = userId;
+  deactivateUserNameText.textContent = username;
+  openDialog('deactivateUserDialog');
+}
+
+function closeDeactivateUserDialog() {
+  deactivateUserIdInput.value = '';
+  deactivateUserNameText.textContent = 'this user';
+  closeDialog('deactivateUserDialog');
+}
+
+async function confirmDeactivateUser() {
+  const userId = deactivateUserIdInput.value;
+  closeDeactivateUserDialog();
   try {
     await apiFetch(`/api/users/${userId}/deactivate`, 'POST');
     location.reload();
   } catch (e) {
     showInlineAlert(usersAlert, 'danger', e.message || 'Failed to deactivate.');
+  }
+}
+
+function openReactivateUserDialog(userId, username) {
+  reactivateUserIdInput.value = userId;
+  reactivateUserNameText.textContent = username;
+  openDialog('reactivateUserDialog');
+}
+
+function closeReactivateUserDialog() {
+  reactivateUserIdInput.value = '';
+  reactivateUserNameText.textContent = 'this user';
+  closeDialog('reactivateUserDialog');
+}
+
+async function confirmReactivateUser() {
+  const userId = reactivateUserIdInput.value;
+  closeReactivateUserDialog();
+  try {
+    await apiFetch(`/api/users/${userId}/reactivate`, 'POST');
+    location.reload();
+  } catch (e) {
+    showInlineAlert(usersAlert, 'danger', e.message || 'Failed to re-activate.');
+  }
+}
+
+function openDeleteUserDialog(userId, username) {
+  pendingDeleteUsername = username;
+  deleteUserIdInput.value = userId;
+  deleteUserNameText.textContent = username;
+  deleteUserConfirmInput.value = '';
+  deleteUserConfirmInput.placeholder = username;
+  btnConfirmDeleteUser.disabled = true;
+  openDialog('deleteUserDialog');
+}
+
+function closeDeleteUserDialog() {
+  pendingDeleteUsername = '';
+  deleteUserIdInput.value = '';
+  deleteUserNameText.textContent = 'this user';
+  deleteUserConfirmInput.value = '';
+  deleteUserConfirmInput.placeholder = '';
+  btnConfirmDeleteUser.disabled = true;
+  closeDialog('deleteUserDialog');
+}
+
+deleteUserConfirmInput?.addEventListener('input', () => {
+  btnConfirmDeleteUser.disabled = deleteUserConfirmInput.value !== pendingDeleteUsername;
+});
+
+async function confirmDeleteUser() {
+  const userId = deleteUserIdInput.value;
+  if (!userId || deleteUserConfirmInput.value !== pendingDeleteUsername) return;
+  closeDeleteUserDialog();
+  try {
+    await apiFetch(`/api/users/${userId}`, 'DELETE');
+    location.reload();
+  } catch (e) {
+    showInlineAlert(usersAlert, 'danger', e.message || 'Failed to delete user.');
   }
 }
 

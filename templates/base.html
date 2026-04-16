@@ -682,6 +682,11 @@
       width: min(32rem, calc(100vw - 2rem));
       box-shadow: 0 16px 48px rgba(15, 23, 42, 0.14);
     }
+    @media (max-width: 576px) {
+      dialog > article {
+        max-width: calc(100vw - 50px);
+      }
+    }
     dialog::backdrop {
       background: rgba(15, 23, 42, 0.38);
       backdrop-filter: blur(4px);

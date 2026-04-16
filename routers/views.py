@@ -347,7 +347,7 @@ async def login_submit(request: Request,
     elif user["status"] == "pending":
         error = "Your account is awaiting approval."
     elif user["status"] == "rejected":
-        error = "Your access request was not approved."
+        error = "Your account is deactivated. Please contact an administrator."
     elif not verify_password(password, user["password"]):
         error = "Invalid username or password."
 
@@ -557,14 +557,16 @@ async def users_view(request: Request, session_token: str = Cookie(default=None)
     if user["role"] != "admin":
         return RedirectResponse("/physical", status_code=status.HTTP_302_FOUND)
 
-    active_users  = await database.list_users(status="active")
+    active_users = await database.list_users(status="active")
     pending_users = await database.list_users(status="pending")
+    deactivated_users = await database.list_users(status="rejected")
 
     return templates.TemplateResponse(
         request, "users.html",
         {
-            "user":          dict(user),
-            "active_users":  [dict(u) for u in active_users],
+            "user": dict(user),
+            "active_users": [dict(u) for u in active_users],
             "pending_users": [dict(u) for u in pending_users],
+            "deactivated_users": [dict(u) for u in deactivated_users],
         },
     )
