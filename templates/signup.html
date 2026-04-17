@@ -13,6 +13,16 @@
     :root {
       --pico-font-size: 95%;
       --pico-border-radius: 1rem;
+      --auth-ink: #0f172a;
+      --auth-muted: #64748b;
+      --auth-border: rgba(148, 163, 184, 0.22);
+      --auth-accent: #2563eb;
+      --auth-min-height: 100vh;
+    }
+    @supports (min-height: 100dvh) {
+      :root {
+        --auth-min-height: 100dvh;
+      }
     }
     html,
     body {
@@ -22,31 +32,43 @@
       width: 100%;
     }
     body {
-      min-height: 100vh;
+      min-height: var(--auth-min-height);
       margin: 0;
       display: grid;
       place-items: center;
+      padding: 0;
       background:
         radial-gradient(circle at top left, rgba(59, 130, 246, 0.09), transparent 28%),
         radial-gradient(circle at bottom right, rgba(16, 185, 129, 0.06), transparent 26%),
         #f1f5f9;
     }
+    .auth-page {
+      width: 100%;
+      display: grid;
+      place-items: center;
+      padding: 1rem;
+    }
     .auth-shell {
       width: min(34rem, calc(100vw - 2rem));
-      border: 1px solid rgba(148, 163, 184, 0.22);
-      border-radius: 1.5rem;
-      background: #ffffff;
-      box-shadow: 0 16px 48px rgba(15, 23, 42, 0.10);
+      border: 1px solid var(--auth-border);
+      border-radius: 1.7rem;
+      background:
+        linear-gradient(180deg, rgba(248, 250, 252, 0.96), rgba(255, 255, 255, 1) 28%);
+      box-shadow:
+        0 24px 60px rgba(15, 23, 42, 0.12),
+        inset 0 1px 0 rgba(255, 255, 255, 0.75);
       padding: 2.15rem;
     }
     .auth-panel {
-      padding: 0;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      gap: 1.35rem;
       margin: 0;
     }
     .auth-hero {
       display: grid;
       gap: 0.75rem;
-      margin-bottom: 1.35rem;
     }
     .auth-brand {
       display: flex;
@@ -62,14 +84,14 @@
       border-radius: 1.1rem;
       background:
         linear-gradient(145deg, rgba(37, 99, 235, 0.14), rgba(14, 165, 233, 0.10));
-      color: #2563eb;
+      color: var(--auth-accent);
       border: 1px solid rgba(37, 99, 235, 0.18);
       font-size: 1.45rem;
       box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.7);
     }
     .auth-title {
-      margin: 0 0 0.25rem;
-      color: #0f172a;
+      margin: 0;
+      color: var(--auth-ink);
       font-size: 2rem;
       line-height: 1.05;
     }
@@ -77,6 +99,23 @@
       margin: 0;
       color: #475569;
       max-width: 26rem;
+    }
+    .auth-form-shell {
+      padding: 0;
+      border: none;
+      border-radius: 1.2rem;
+      background: transparent;
+      box-shadow: none;
+    }
+    .auth-form-head {
+      margin-bottom: 1.15rem;
+    }
+    .auth-form-head h2 {
+      margin-bottom: 0.2rem;
+      color: var(--auth-ink);
+    }
+    .auth-form-head p {
+      display: none;
     }
     .input-icon {
       position: relative;
@@ -102,16 +141,23 @@
       border-color: rgba(148, 163, 184, 0.28);
       background: #fff;
     }
+    .auth-panel article {
+      margin-bottom: 1rem;
+    }
+    .auth-links {
+      text-align: center;
+      margin-top: 1rem;
+      color: #94a3b8;
+    }
     .me-1 {
       margin-right: 0.35rem;
     }
     .muted {
-      color: #64748b;
+      color: var(--auth-muted);
     }
     @media (max-width: 576px) {
       body {
         place-items: start center;
-        padding: 1rem;
       }
       .auth-shell input,
       .auth-shell button,
@@ -123,62 +169,68 @@
   </style>
 </head>
 <body>
-<main class="auth-shell">
-  <section class="auth-panel">
-    <div class="auth-hero">
-      <div class="auth-brand">
-        <span class="auth-mark"><i class="bi bi-hdd-rack"></i></span>
-        <div>
-          <h1 class="auth-title">VM Builder</h1>
+<main class="auth-page">
+  <div class="auth-shell">
+    <section class="auth-panel">
+      <div class="auth-hero">
+        <div class="auth-brand">
+          <span class="auth-mark"><i class="bi bi-hdd-rack"></i></span>
+          <div>
+            <h1 class="auth-title">VM Builder</h1>
+          </div>
         </div>
+        <p class="auth-subtitle">Create a pending account for admin approval.</p>
       </div>
-      <p class="auth-subtitle">Create a pending account for admin approval.</p>
-    </div>
 
-    <div style="margin-bottom:1.25rem;">
-      <h2 style="margin-bottom:0.25rem;">Request access</h2>
-    </div>
-
-    {% if success %}
-    <article>
-      <i class="bi bi-check-circle me-1"></i>Your request has been submitted. An admin will review it shortly.
-    </article>
-    <a href="/login" role="button"><i class="bi bi-arrow-left me-1"></i>Back to login</a>
-    {% else %}
-      {% if error %}
-      <article>
-        <i class="bi bi-exclamation-triangle me-1"></i>{{ error }}
-      </article>
-      {% endif %}
-
-      <form method="post" action="/signup">
-        <label for="username">Username</label>
-        <div class="input-icon">
-          <i class="bi bi-person"></i>
-          <input type="text" id="username" name="username" autocomplete="username" autofocus required>
+      <div class="auth-form-shell">
+        <div class="auth-form-head">
+          <div>
+            <h2>Sign up</h2>
+          </div>
         </div>
 
-        <label for="password">Password</label>
-        <div class="input-icon">
-          <i class="bi bi-key"></i>
-          <input type="password" id="password" name="password" autocomplete="new-password" required minlength="8">
-        </div>
-        <small>Minimum 8 characters.</small>
+        {% if success %}
+        <article>
+          <i class="bi bi-check-circle me-1"></i>Your request has been submitted. An admin will review it shortly.
+        </article>
+        <a href="/login" role="button"><i class="bi bi-arrow-left me-1"></i>Back to login</a>
+        {% else %}
+          {% if error %}
+          <article>
+            <i class="bi bi-exclamation-triangle me-1"></i>{{ error }}
+          </article>
+          {% endif %}
 
-        <label for="confirm">Confirm password</label>
-        <div class="input-icon">
-          <i class="bi bi-shield-lock"></i>
-          <input type="password" id="confirm" name="confirm" autocomplete="new-password" required>
-        </div>
+          <form method="post" action="/signup">
+            <label for="username">Username</label>
+            <div class="input-icon">
+              <i class="bi bi-person"></i>
+              <input type="text" id="username" name="username" autocomplete="username" autofocus required>
+            </div>
 
-        <button type="submit"><i class="bi bi-send me-1"></i>Submit request</button>
-      </form>
-    {% endif %}
+            <label for="password">Password</label>
+            <div class="input-icon">
+              <i class="bi bi-key"></i>
+              <input type="password" id="password" name="password" autocomplete="new-password" required minlength="8">
+            </div>
+            <small>Minimum 8 characters.</small>
 
-    <p style="text-align:center; margin-top:1.2rem; color:#94a3b8;">
-      Already have an account? <a href="/login">Sign in</a>
-    </p>
-  </section>
+            <label for="confirm">Confirm password</label>
+            <div class="input-icon">
+              <i class="bi bi-shield-lock"></i>
+              <input type="password" id="confirm" name="confirm" autocomplete="new-password" required>
+            </div>
+
+            <button type="submit"><i class="bi bi-send me-1"></i>Submit request</button>
+          </form>
+        {% endif %}
+
+        <p class="auth-links">
+          Already have an account? <a href="/login">Sign in</a>
+        </p>
+      </div>
+    </section>
+  </div>
 </main>
 </body>
 </html>
