@@ -203,8 +203,15 @@
       {% endif %}
       {% endfor %}
     </select>
+    <div class="pci-picker-shell">
+      <div class="pci-picker-head">
+        <label class="pci-picker-label" for="vmPciDevices">PCI passthrough <span class="muted small">(Optional)</span></label>
+      </div>
+      <div id="vmPciDevices" class="pci-picker-list"></div>
+      <p id="vmPciDevicesHint" class="muted small pci-picker-hint">No available PCI devices on this hypervisor.</p>
+    </div>
     <label for="vmName">Name</label>
-    <input type="text" id="vmName" placeholder="e.g. ubuntu-3" autocomplete="off">
+    <input type="text" id="vmName" placeholder="e.g. ubuntu-3, docker-4, webapp-2" autocomplete="off">
     <div class="metric-grid" style="grid-template-columns: 1fr 1fr 1fr; gap: 0.75rem;">
       <label>
         vCPU
@@ -228,8 +235,16 @@
     </select>
     <label for="vmAutomationUser">Automation user</label>
     <input type="text" id="vmAutomationUser" value="ubuntu" autocomplete="off">
-    <label for="vmAuthorizedKey">Authorized key (public key)</label>
-    <textarea id="vmAuthorizedKey" rows="3" placeholder="ssh-rsa AAAA..." style="font-family: monospace; font-size: 0.8rem; resize: vertical;"></textarea>
+    <label for="vmAuthorizedKey">SSH key</label>
+    <select id="vmAuthorizedKey">
+      <option value="">Select an SSH key</option>
+      {% for key in ssh_keys %}
+      <option value="{{ key.public_key }}">{{ key.name }}</option>
+      {% endfor %}
+    </select>
+    {% if not ssh_keys %}
+    <p class="muted small" style="margin-top:0.45rem;">No SSH keys in inventory yet. Add one on the Keys page before creating a VM.</p>
+    {% endif %}
     <div class="dialog-footer">
       <button type="button" class="secondary" onclick="closeDialog('createVmDialog')">Cancel</button>
       <button type="button" id="createVmSubmit" onclick="createVm()"><i class="bi bi-plus-lg me-1"></i><span>Create</span></button>
@@ -281,9 +296,6 @@
     margin: 0 0 0.2rem;
     font-size: 1rem;
   }
-  .virtual-card-title a {
-    text-decoration: none;
-  }
   .virtual-card-grid {
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -326,6 +338,58 @@
     background: #fff;
     border-bottom: 1px solid var(--app-border);
   }
+  .pci-picker-shell {
+    margin-top: 0.95rem;
+    margin-bottom: 0.95rem;
+  }
+  .pci-picker-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    margin-bottom: 0.45rem;
+  }
+  .pci-picker-label {
+    margin: 0;
+  }
+  .pci-picker-list {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.55rem;
+  }
+  .pci-picker-item {
+    display: grid;
+    gap: 0.2rem;
+    padding: 0.8rem 0.9rem;
+    border: 1px solid rgba(148, 163, 184, 0.18);
+    border-radius: 0.9rem;
+    background: var(--app-panel-alt);
+  }
+  .pci-picker-item-head {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.65rem;
+  }
+  .pci-picker-item input[type="checkbox"] {
+    margin: 0.2rem 0 0;
+  }
+  .pci-picker-item-title {
+    margin: 0;
+    font-weight: 600;
+    color: #0f172a;
+  }
+  .pci-picker-item-meta {
+    color: var(--app-text-muted);
+    font-size: 0.8rem;
+  }
+  .pci-picker-item-attachment {
+    color: #b45309;
+    font-size: 0.76rem;
+    font-weight: 600;
+  }
+  .pci-picker-hint {
+    margin: 0.45rem 0 0;
+  }
   .spin {
     display: inline-block;
     animation: virtual-spin 0.9s linear infinite;
@@ -362,6 +426,9 @@
     #createVmDialog .metric-grid {
       grid-template-columns: 1fr !important;
     }
+    .pci-picker-list {
+      grid-template-columns: 1fr;
+    }
   }
 </style>
 {% endblock %}
@@ -369,6 +436,8 @@
 {% block scripts %}
 {% if user.role in ('admin', 'operator') %}
 <script>
+const agentPciInventory = {{ agent_pci_inventory | tojson }};
+
 function getImageUrl() {
   return document.getElementById('vmImagePreset').value;
 }
@@ -401,7 +470,52 @@ function setCreateVmSubmitting(submitting) {
     : '<i class="bi bi-plus-lg me-1"></i><span>Create</span>';
 }
 
+function renderPciDeviceOptions() {
+  const agentName = document.getElementById('vmAgent')?.value || '';
+  const list = document.getElementById('vmPciDevices');
+  const hint = document.getElementById('vmPciDevicesHint');
+  if (!list || !hint) return;
+
+  const devices = agentPciInventory[agentName] || [];
+  list.innerHTML = '';
+
+  if (!devices.length) {
+    hint.hidden = false;
+    return;
+  }
+
+  hint.hidden = true;
+  devices.forEach((device, index) => {
+    const wrapper = document.createElement('label');
+    wrapper.className = 'pci-picker-item';
+    wrapper.innerHTML = `
+      <div class="pci-picker-item-head">
+        <input type="checkbox" value="${escapeHtml(device.address || '')}" data-pci-device-checkbox>
+        <div>
+          <div class="pci-picker-item-title">${escapeHtml(device.name || 'Unknown device')}</div>
+          <div class="pci-picker-item-meta">
+            ${escapeHtml(device.vendor || 'Unknown vendor')}${device.class ? ` · ${escapeHtml(device.class)}` : ''}
+          </div>
+          <div class="mono small muted">${escapeHtml(device.address || '')}</div>
+          ${device.attached_to ? `<div class="pci-picker-item-attachment">Attached to ${escapeHtml(device.attached_to)}</div>` : ''}
+        </div>
+      </div>
+    `;
+    const checkbox = wrapper.querySelector('input[type="checkbox"]');
+    if (checkbox) {
+      checkbox.id = `vmPciDevice${index}`;
+    }
+    list.appendChild(wrapper);
+  });
+}
+
 let openVirtualMenu = null;
+
+document.getElementById('vmAgent')?.addEventListener('change', () => {
+  renderPciDeviceOptions();
+});
+
+renderPciDeviceOptions();
 
 document.querySelectorAll('[data-virtual-actions-toggle]').forEach((toggle) => {
   toggle.addEventListener('click', (event) => {
@@ -472,13 +586,16 @@ async function createVm() {
   const cloud_image_url = getImageUrl();
   const automation_user = document.getElementById('vmAutomationUser').value.trim() || 'ubuntu';
   const automation_user_pubkey = document.getElementById('vmAuthorizedKey').value.trim();
+  const pci_devices = Array.from(document.querySelectorAll('[data-pci-device-checkbox]:checked'))
+    .map((item) => item.value)
+    .filter(Boolean);
 
   if (!name) {
     showInlineAlert(alert, 'warning', 'VM name is required.');
     return;
   }
   if (!automation_user_pubkey) {
-    showInlineAlert(alert, 'warning', 'Authorized key is required.');
+    showInlineAlert(alert, 'warning', 'SSH key selection is required.');
     return;
   }
 
@@ -486,7 +603,7 @@ async function createVm() {
   try {
     const data = await apiFetch(`/api/agents/${encodeURIComponent(agentName)}/vm/create`, 'POST', {
       name, cpu, memory_gib, disks_gib: [disk_gib], cloud_image_url,
-      automation_user, automation_user_pubkey
+      automation_user, automation_user_pubkey, pci_devices
     });
     const createdName = data.name || name;
     showInlineAlert(alert, 'success', `VM ${createdName} is being prepared. Opening it when it becomes available…`);

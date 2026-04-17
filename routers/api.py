@@ -292,3 +292,48 @@ async def delete_user_api(user_id: int, user=Depends(require_role("admin"))):
         raise HTTPException(status_code=400, detail="You cannot delete yourself")
     await database.delete_user_permanently(user_id)
     return {"ok": True}
+
+
+# ---------------------------------------------------------------------------
+# SSH key management (admin only)
+# ---------------------------------------------------------------------------
+
+def _looks_like_ssh_public_key(value: str) -> bool:
+    parts = value.strip().split()
+    if len(parts) < 2:
+        return False
+    key_type = parts[0]
+    return key_type.startswith(("ssh-", "ecdsa-", "sk-"))
+
+
+@router.get("/keys")
+async def list_keys_api(user=Depends(require_role("admin", "operator", "viewer"))):
+    rows = await database.list_ssh_keys()
+    return [dict(r) for r in rows]
+
+
+@router.post("/keys")
+async def create_key_api(request: Request, user=Depends(require_role("admin", "operator"))):
+    body = await request.json()
+    name = body.get("name", "").strip()
+    public_key = body.get("public_key", "").strip()
+
+    if not name or not public_key:
+        raise HTTPException(status_code=400, detail="name and public_key required")
+    if not _looks_like_ssh_public_key(public_key):
+        raise HTTPException(status_code=400, detail="Invalid SSH public key")
+    if await database.get_ssh_key_by_name(name):
+        raise HTTPException(status_code=409, detail="Key name already exists")
+    if await database.get_ssh_key_by_public_key(public_key):
+        raise HTTPException(status_code=409, detail="SSH public key already exists")
+
+    await database.create_ssh_key(name, public_key)
+    return {"ok": True}
+
+
+@router.delete("/keys/{key_id}")
+async def delete_key_api(key_id: int, user=Depends(require_role("admin", "operator"))):
+    deleted = await database.delete_ssh_key(key_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="SSH key not found")
+    return {"ok": True}

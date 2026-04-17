@@ -1,0 +1,347 @@
+{% extends "base.html" %}
+{% block title %}SSH Keys{% endblock %}
+{% block topbar_title %}<i class="bi bi-key me-2"></i>SSH Keys{% endblock %}
+
+{% block content %}
+<article id="keysAlert" class="flash hidden"></article>
+
+<article class="panel">
+  <div class="panel-header">
+    <h2 class="panel-title"><i class="bi bi-key"></i>SSH Key Inventory</h2>
+    {% if user.role in ('admin', 'operator') %}
+    <div class="action-menu-shell keys-actions-shell">
+      <button
+        type="button"
+        class="action-menu-toggle keys-actions-toggle"
+        data-keys-actions-toggle
+        aria-label="Open key actions"
+        aria-expanded="false"
+      >
+        <i class="bi bi-three-dots-vertical"></i>
+      </button>
+      <div class="action-menu keys-actions-menu" data-keys-actions-menu>
+        <button type="button" class="action-menu-btn keys-action-menu-btn" onclick="openDialog('addKeyDialog')">
+          <i class="bi bi-plus-lg"></i>Add Key
+        </button>
+      </div>
+    </div>
+    {% endif %}
+  </div>
+
+  {% if keys %}
+  <div class="table-wrap keys-table">
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Public Key</th>
+          {% if user.role in ('admin', 'operator') %}
+          <th class="right">Actions</th>
+          {% endif %}
+        </tr>
+      </thead>
+      <tbody>
+        {% for key in keys %}
+        <tr>
+          <td><strong>{{ key.name }}</strong></td>
+          <td class="muted small mono" title="{{ key.public_key }}">{{ key.fragment }}</td>
+          {% if user.role in ('admin', 'operator') %}
+          <td class="keys-actions-cell">
+            <div class="action-menu-shell keys-actions-shell">
+              <button
+                type="button"
+                class="action-menu-toggle keys-actions-toggle"
+                data-keys-actions-toggle
+                aria-label="Open key actions"
+                aria-expanded="false"
+              >
+                <i class="bi bi-three-dots-vertical"></i>
+              </button>
+              <div class="action-menu keys-actions-menu" data-keys-actions-menu>
+                <button
+                  type="button"
+                  class="action-menu-btn action-menu-danger keys-action-menu-btn"
+                  data-key-action="remove"
+                  data-key-id="{{ key.id }}"
+                  data-key-name="{{ key.name | e }}"
+                >
+                  <i class="bi bi-trash"></i>Remove
+                </button>
+              </div>
+            </div>
+          </td>
+          {% endif %}
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <div class="keys-cards">
+    {% for key in keys %}
+    <article class="key-card">
+      <div class="key-card-head">
+        <div class="key-card-heading">
+          <h2 class="key-card-title">{{ key.name }}</h2>
+        </div>
+        {% if user.role in ('admin', 'operator') %}
+        <div class="key-card-head-side">
+          <div class="action-menu-shell keys-actions-shell">
+            <button
+              type="button"
+              class="action-menu-toggle keys-actions-toggle"
+              data-keys-actions-toggle
+              aria-label="Open key actions"
+              aria-expanded="false"
+            >
+              <i class="bi bi-three-dots-vertical"></i>
+            </button>
+            <div class="action-menu keys-actions-menu" data-keys-actions-menu>
+              <button
+                type="button"
+                class="action-menu-btn action-menu-danger keys-action-menu-btn"
+                data-key-action="remove"
+                data-key-id="{{ key.id }}"
+                data-key-name="{{ key.name | e }}"
+              >
+                <i class="bi bi-trash"></i>Remove
+              </button>
+            </div>
+          </div>
+        </div>
+        {% endif %}
+      </div>
+      <div class="key-card-item">
+        <div class="key-card-label">Public Key</div>
+        <div class="muted small mono" title="{{ key.public_key }}">{{ key.fragment }}</div>
+      </div>
+    </article>
+    {% endfor %}
+  </div>
+  {% else %}
+  <article class="empty-state">
+    <div class="empty-icon"><i class="bi bi-key"></i></div>
+    <h3>No SSH keys added</h3>
+    {% if user.role in ('admin', 'operator') %}
+    <p>Add a public key from the actions menu to start building your key inventory.</p>
+    {% else %}
+    <p>No SSH public keys have been added yet.</p>
+    {% endif %}
+  </article>
+  {% endif %}
+</article>
+
+{% if user.role in ('admin', 'operator') %}
+<dialog id="addKeyDialog">
+  <article style="margin:0;">
+    <div class="dialog-header">
+      <h3 class="dialog-title"><i class="bi bi-key me-2"></i>Add Key</h3>
+      <button type="button" class="dialog-close" onclick="closeDialog('addKeyDialog')"><i class="bi bi-x-lg"></i></button>
+    </div>
+    <label for="newKeyName">Name</label>
+    <input type="text" id="newKeyName" placeholder="e.g. work-laptop" autocomplete="off">
+    <label for="newPublicKey">SSH public key</label>
+    <textarea id="newPublicKey" rows="4" placeholder="ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAI..." style="font-family: monospace; font-size: 0.8rem; resize: vertical;"></textarea>
+    <div class="dialog-footer">
+      <button type="button" class="secondary" onclick="closeDialog('addKeyDialog')">Cancel</button>
+      <button type="button" onclick="createKey()"><i class="bi bi-plus-lg me-1"></i>Add</button>
+    </div>
+  </article>
+</dialog>
+{% endif %}
+
+<dialog id="removeKeyDialog">
+  <article style="margin:0;">
+    <div class="dialog-header">
+      <h3 class="dialog-title"><i class="bi bi-trash me-2"></i>Remove Key</h3>
+      <button type="button" class="dialog-close" onclick="closeRemoveKeyDialog()"><i class="bi bi-x-lg"></i></button>
+    </div>
+    <p>Remove <strong id="removeKeyNameText">this key</strong> from the inventory?</p>
+    <input type="hidden" id="removeKeyId">
+    <div class="dialog-footer">
+      <button type="button" class="secondary" onclick="closeRemoveKeyDialog()">Cancel</button>
+      <button type="button" class="keys-danger-btn" onclick="confirmRemoveKey()"><i class="bi bi-trash me-1"></i>Remove</button>
+    </div>
+  </article>
+</dialog>
+{% endblock %}
+
+{% block head %}
+<style>
+  .keys-cards {
+    display: none;
+  }
+  .key-card {
+    display: grid;
+    gap: 0.9rem;
+    padding: 1rem;
+    border: 1px solid var(--app-border);
+    border-radius: 1rem;
+    background: #fff;
+    box-shadow: 0 4px 16px rgba(15, 23, 42, 0.06);
+  }
+  .key-card-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 0.75rem;
+  }
+  .key-card-heading {
+    min-width: 0;
+  }
+  .key-card-head-side {
+    display: flex;
+    align-items: center;
+    gap: 0.55rem;
+    flex-shrink: 0;
+  }
+  .key-card-title {
+    margin: 0;
+    font-size: 1rem;
+  }
+  .keys-actions-cell {
+    text-align: right;
+  }
+  .key-card-item {
+    padding: 0.8rem 0.9rem;
+    border-radius: 0.9rem;
+    background: var(--app-panel-alt);
+    border: 1px solid rgba(148, 163, 184, 0.16);
+  }
+  .key-card-label {
+    color: var(--app-text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    font-size: 0.68rem;
+    margin-bottom: 0.25rem;
+  }
+  .keys-danger-btn {
+    background: #dc2626;
+    border-color: #dc2626;
+    color: #fff;
+  }
+  .keys-danger-btn:hover {
+    background: #b91c1c;
+    border-color: #b91c1c;
+  }
+  @media (min-width: 761px) {
+    .keys-table {
+      overflow: visible;
+    }
+  }
+  @media (max-width: 760px) {
+    .dialog-footer {
+      flex-wrap: wrap;
+    }
+    .keys-table {
+      display: none;
+    }
+    .keys-cards {
+      display: grid;
+      gap: 0.9rem;
+    }
+    .key-card-head,
+    .key-card-head-side {
+      align-items: center;
+    }
+  }
+</style>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const keysAlert = document.getElementById('keysAlert');
+const removeKeyIdInput = document.getElementById('removeKeyId');
+const removeKeyNameText = document.getElementById('removeKeyNameText');
+
+let openKeysMenu = null;
+
+document.querySelectorAll('[data-keys-actions-toggle]').forEach((toggle) => {
+  toggle.addEventListener('click', (event) => {
+    event.stopPropagation();
+    const shell = toggle.closest('.keys-actions-shell');
+    const menu = shell ? shell.querySelector('[data-keys-actions-menu]') : null;
+    if (!menu) return;
+    const willOpen = !menu.classList.contains('is-open');
+    if (openKeysMenu && openKeysMenu !== menu) {
+      openKeysMenu.classList.remove('is-open');
+      openKeysMenu.parentElement?.querySelector('[data-keys-actions-toggle]')?.setAttribute('aria-expanded', 'false');
+    }
+    menu.classList.toggle('is-open', willOpen);
+    toggle.setAttribute('aria-expanded', willOpen ? 'true' : 'false');
+    openKeysMenu = willOpen ? menu : null;
+  });
+});
+
+document.addEventListener('click', (event) => {
+  if (!openKeysMenu) return;
+  const shell = openKeysMenu.closest('.keys-actions-shell');
+  if (shell && !shell.contains(event.target)) {
+    openKeysMenu.classList.remove('is-open');
+    shell.querySelector('[data-keys-actions-toggle]')?.setAttribute('aria-expanded', 'false');
+    openKeysMenu = null;
+  }
+});
+
+function closeKeysActionMenu(button) {
+  const shell = button.closest('.keys-actions-shell');
+  const menu = shell ? shell.querySelector('[data-keys-actions-menu]') : null;
+  const toggle = shell ? shell.querySelector('[data-keys-actions-toggle]') : null;
+  if (menu) menu.classList.remove('is-open');
+  if (toggle) toggle.setAttribute('aria-expanded', 'false');
+  openKeysMenu = null;
+}
+
+document.querySelectorAll('[data-key-action]').forEach((button) => {
+  button.addEventListener('click', async (event) => {
+    event.stopPropagation();
+    closeKeysActionMenu(button);
+    const action = button.dataset.keyAction;
+    const keyId = button.dataset.keyId;
+    const keyName = button.dataset.keyName || '';
+    if (action === 'remove') {
+      openRemoveKeyDialog(keyId, keyName);
+    }
+  });
+});
+
+async function createKey() {
+  const name = document.getElementById('newKeyName').value.trim();
+  const public_key = document.getElementById('newPublicKey').value.trim();
+  if (!name || !public_key) {
+    showInlineAlert(keysAlert, 'warning', 'Name and SSH public key are required.');
+    return;
+  }
+  closeDialog('addKeyDialog');
+  try {
+    await apiFetch('/api/keys', 'POST', { name, public_key });
+    location.reload();
+  } catch (e) {
+    showInlineAlert(keysAlert, 'danger', e.message || 'Failed to add SSH key.');
+  }
+}
+
+function openRemoveKeyDialog(keyId, keyName) {
+  removeKeyIdInput.value = keyId;
+  removeKeyNameText.textContent = keyName;
+  openDialog('removeKeyDialog');
+}
+
+function closeRemoveKeyDialog() {
+  removeKeyIdInput.value = '';
+  removeKeyNameText.textContent = 'this key';
+  closeDialog('removeKeyDialog');
+}
+
+async function confirmRemoveKey() {
+  const keyId = removeKeyIdInput.value;
+  closeRemoveKeyDialog();
+  try {
+    await apiFetch(`/api/keys/${keyId}`, 'DELETE');
+    location.reload();
+  } catch (e) {
+    showInlineAlert(keysAlert, 'danger', e.message || 'Failed to remove SSH key.');
+  }
+}
+</script>
+{% endblock %}

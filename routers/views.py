@@ -259,22 +259,52 @@ def _normalize_node_stats(node: dict | None) -> dict:
 
     ram_total = gib(memory.get("total_bytes"))
     ram_used  = gib(memory.get("used_bytes"))
+    ram_free = gib(memory.get("free_bytes"))
+    ram_available = gib(memory.get("available_bytes"))
     disk_total = gib(disk.get("total_bytes"))
     disk_used  = gib(disk.get("used_bytes"))
+    disk_free = gib(disk.get("free_bytes"))
+
+    pci_devices = []
+    for raw_device in node.get("pci_devices") or []:
+        if not isinstance(raw_device, dict):
+            continue
+        pci_devices.append(
+            {
+                "address": raw_device.get("address"),
+                "class": raw_device.get("class"),
+                "class_id": raw_device.get("class_id"),
+                "vendor": raw_device.get("vendor"),
+                "vendor_id": raw_device.get("vendor_id"),
+                "name": raw_device.get("name"),
+                "device_id": raw_device.get("device_id"),
+                "sub_vendor": raw_device.get("sub_vendor"),
+                "sub_device": raw_device.get("sub_device"),
+                "revision": raw_device.get("revision"),
+                "iommu_group": raw_device.get("iommu_group"),
+                "available": raw_device.get("available"),
+                "attached_to": raw_device.get("attached_to"),
+            }
+        )
 
     return {
         "cpu_total":    cpu.get("total_cores"),
         "cpu_model":    cpu.get("model_name"),
         "ram_total":    ram_total,
         "ram_used":     ram_used,
+        "ram_free":     ram_free,
+        "ram_available": ram_available,
         "ram_pct":      pct(ram_used, ram_total),
         "disk_total":   disk_total,
         "disk_used":    disk_used,
+        "disk_free":    disk_free,
         "disk_pct":     pct(disk_used, disk_total),
         "vms_total":    vms.get("total",   0),
         "vms_running":  vms.get("running", 0),
         "hostname":     node.get("hostname"),
         "os_name":      node.get("os_name"),
+        "kernel_version": node.get("kernel_version"),
+        "pci_devices":  pci_devices,
     }
 
 
@@ -292,6 +322,13 @@ def _normalize_vm_detail(raw_vm: dict | None, agent_name: str = "") -> dict | No
 
     normalized["disk_gb"] = _parse_int(disk_gb)
     return normalized
+
+
+def _ssh_key_fragment(public_key: str | None) -> str:
+    value = (public_key or "").strip()
+    if len(value) <= 36:
+        return value or "—"
+    return f"{value[:24]}...{value[-12:]}"
 
 
 async def _get_session(session_token: str):
@@ -437,6 +474,42 @@ async def physical_view(request: Request, session_token: str = Cookie(default=No
     )
 
 
+@router.get("/physical/{agent_name}", response_class=HTMLResponse)
+async def hypervisor_detail(request: Request, agent_name: str,
+                            session_token: str = Cookie(default=None)):
+    user, redir = await _require_auth(session_token, f"/physical/{agent_name}")
+    if redir:
+        return redir
+
+    raw_agents = await _apiserver(request, "GET", "/agents") or []
+    agent = None
+    for raw in raw_agents:
+        if not isinstance(raw, dict):
+            continue
+        normalized = _normalize_agent(raw)
+        if normalized.get("name") == agent_name:
+            agent = normalized
+            break
+
+    if agent is None:
+        return RedirectResponse("/physical", status_code=status.HTTP_302_FOUND)
+
+    node_raw = {}
+    if agent.get("reachable"):
+        node_raw = await _apiserver(request, "GET", f"/agents/{agent_name}/node") or {}
+    node = _normalize_node_stats(node_raw)
+
+    return templates.TemplateResponse(
+        request, "hypervisor_detail.html",
+        {
+            "user": dict(user),
+            "agent": agent,
+            "agent_name": agent_name,
+            "node": node,
+        },
+    )
+
+
 # ---------------------------------------------------------------------------
 # Virtual view
 # ---------------------------------------------------------------------------
@@ -478,12 +551,52 @@ async def virtual_view(request: Request, session_token: str = Cookie(default=Non
     total = len(flat_vms)
     running = sum(1 for v in flat_vms if v.get("state", "").lower() == "running")
 
-    agents = [_normalize_agent(r) for r in raw_agents if isinstance(r, dict)]
+    agents = []
+    for raw in raw_agents:
+        if not isinstance(raw, dict):
+            continue
+        agent = _normalize_agent(raw)
+        node_raw = {}
+        if agent.get("reachable"):
+            node_raw = await _apiserver(request, "GET", f"/agents/{agent['name']}/node") or {}
+        agent["node"] = _normalize_node_stats(node_raw)
+        agents.append(agent)
     agents.sort(key=lambda a: a.get("name", "").lower())
+
+    agent_pci_inventory = {}
+    for agent in agents:
+        if not agent.get("reachable"):
+            continue
+        agent_pci_inventory[agent["name"]] = [
+            {
+                "address": device.get("address"),
+                "name": device.get("name"),
+                "vendor": device.get("vendor"),
+                "class": device.get("class"),
+                "available": device.get("available"),
+                "attached_to": device.get("attached_to"),
+            }
+            for device in (agent.get("node", {}).get("pci_devices") or [])
+            if device.get("available")
+        ]
+
+    ssh_keys = []
+    for row in await database.list_ssh_keys():
+        item = dict(row)
+        item["fragment"] = _ssh_key_fragment(item.get("public_key"))
+        ssh_keys.append(item)
 
     return templates.TemplateResponse(
         request, "virtual.html",
-        {"user": dict(user), "vms": flat_vms, "total": total, "running": running, "agents": agents},
+        {
+            "user": dict(user),
+            "vms": flat_vms,
+            "total": total,
+            "running": running,
+            "agents": agents,
+            "agent_pci_inventory": agent_pci_inventory,
+            "ssh_keys": ssh_keys,
+        },
     )
 
 
@@ -503,6 +616,15 @@ async def vm_detail(request: Request, agent_name: str, vm_name: str,
         agent_name,
     )
     operations = await database.list_operations_for_vm(agent_name, vm_name)
+    attached_pci_devices = []
+
+    if vm:
+        node_raw = await _apiserver(request, "GET", f"/agents/{agent_name}/node") or {}
+        node = _normalize_node_stats(node_raw)
+        attached_pci_devices = [
+            device for device in (node.get("pci_devices") or [])
+            if device.get("attached_to") == vm_name
+        ]
 
     return templates.TemplateResponse(
         request, "vm_detail.html",
@@ -512,6 +634,7 @@ async def vm_detail(request: Request, agent_name: str, vm_name: str,
             "vm_name":    vm_name,
             "vm":         vm,
             "operations": [dict(item) for item in operations],
+            "attached_pci_devices": attached_pci_devices,
         },
     )
 
@@ -568,5 +691,26 @@ async def users_view(request: Request, session_token: str = Cookie(default=None)
             "active_users": [dict(u) for u in active_users],
             "pending_users": [dict(u) for u in pending_users],
             "deactivated_users": [dict(u) for u in deactivated_users],
+        },
+    )
+
+
+@router.get("/keys", response_class=HTMLResponse)
+async def keys_view(request: Request, session_token: str = Cookie(default=None)):
+    user, redir = await _require_auth(session_token, "/keys")
+    if redir:
+        return redir
+
+    keys = []
+    for row in await database.list_ssh_keys():
+        item = dict(row)
+        item["fragment"] = _ssh_key_fragment(item.get("public_key"))
+        keys.append(item)
+
+    return templates.TemplateResponse(
+        request, "keys.html",
+        {
+            "user": dict(user),
+            "keys": keys,
         },
     )

@@ -47,6 +47,13 @@ async def init_db():
                 created_at  TEXT DEFAULT (datetime('now')),
                 updated_at  TEXT DEFAULT (datetime('now'))
             );
+
+            CREATE TABLE IF NOT EXISTS ssh_keys (
+                id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                name        TEXT UNIQUE NOT NULL,
+                public_key  TEXT UNIQUE NOT NULL,
+                created_at  TEXT DEFAULT (datetime('now'))
+            );
         """)
         await db.commit()
 
@@ -155,6 +162,50 @@ async def delete_user_permanently(user_id: int):
             (user_id,),
         )
         await db.commit()
+
+
+# ---------------------------------------------------------------------------
+# SSH key helpers
+# ---------------------------------------------------------------------------
+
+async def list_ssh_keys():
+    async with _connect() as db:
+        cursor = await db.execute(
+            "SELECT * FROM ssh_keys ORDER BY lower(name), created_at DESC"
+        )
+        return await cursor.fetchall()
+
+
+async def get_ssh_key_by_name(name: str):
+    async with _connect() as db:
+        cursor = await db.execute(
+            "SELECT * FROM ssh_keys WHERE name = ?", (name,)
+        )
+        return await cursor.fetchone()
+
+
+async def get_ssh_key_by_public_key(public_key: str):
+    async with _connect() as db:
+        cursor = await db.execute(
+            "SELECT * FROM ssh_keys WHERE public_key = ?", (public_key,)
+        )
+        return await cursor.fetchone()
+
+
+async def create_ssh_key(name: str, public_key: str):
+    async with _connect() as db:
+        await db.execute(
+            "INSERT INTO ssh_keys (name, public_key) VALUES (?, ?)",
+            (name, public_key),
+        )
+        await db.commit()
+
+
+async def delete_ssh_key(key_id: int) -> bool:
+    async with _connect() as db:
+        cursor = await db.execute("DELETE FROM ssh_keys WHERE id = ?", (key_id,))
+        await db.commit()
+        return cursor.rowcount > 0
 
 
 # ---------------------------------------------------------------------------

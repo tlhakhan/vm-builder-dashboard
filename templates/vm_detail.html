@@ -87,88 +87,116 @@
         {% endif %}
         <tr>
           <td class="spec-label">Hypervisor</td>
-          <td>{{ agent_name }}</td>
+          <td><a href="/physical/{{ agent_name | urlencode }}">{{ agent_name }}</a></td>
         </tr>
       </tbody>
     </table>
     {% endif %}
   </article>
 
-  {# Right — Past operations #}
-  <article class="panel">
-    <div class="panel-header">
-      <h2 class="panel-title"><i class="bi bi-clock-history"></i>Past operations</h2>
-      <span class="soft-pill">{{ operations | length }}</span>
-    </div>
-    {% if operations %}
-    <div class="table-wrap vm-ops-table">
-      <table>
-        <thead>
-          <tr>
-            <th>Action</th>
-            <th>Recorded</th>
-            <th>Output</th>
-          </tr>
-        </thead>
-        <tbody>
-          {% for operation in operations %}
-          <tr>
-            <td>{{ operation.action }}</td>
-            <td class="muted small" data-ts="{{ operation.created_at }}">{{ operation.created_at }}</td>
-            <td>
-              {% if operation.log %}
-              <button
-                type="button"
-                class="btn-open"
-                data-operation-output
-                data-action="{{ operation.action | e }}"
-                data-created-at="{{ operation.created_at | e }}"
-                data-log="{{ operation.log | e }}"
-              >
-                <i class="bi bi-window-stack me-1"></i>View output
-              </button>
-              {% else %}
-              <span class="muted small">No output captured</span>
-              {% endif %}
-            </td>
-          </tr>
-          {% endfor %}
-        </tbody>
-      </table>
-    </div>
-    <div class="vm-ops-cards">
-      {% for operation in operations %}
-      <article class="vm-op-card">
-        <div class="vm-op-card-head">
-          <div class="vm-op-card-title">{{ operation.action }}</div>
-          <div class="muted small" data-ts="{{ operation.created_at }}">{{ operation.created_at }}</div>
-        </div>
-        <div>
-          {% if operation.log %}
-          <button
-            type="button"
-            class="btn-open"
-            data-operation-output
-            data-action="{{ operation.action | e }}"
-            data-created-at="{{ operation.created_at | e }}"
-            data-log="{{ operation.log | e }}"
-          >
-            <i class="bi bi-window-stack me-1"></i>View output
-          </button>
-          {% else %}
-          <span class="muted small">No output captured</span>
-          {% endif %}
-        </div>
+  {# Right — operations and attached PCI devices #}
+  <div class="vm-detail-side">
+    <article class="panel">
+      <div class="panel-header">
+        <h2 class="panel-title"><i class="bi bi-clock-history"></i>Past operations</h2>
+        <span class="soft-pill">{{ operations | length }}</span>
+      </div>
+      {% if operations %}
+      <div class="table-wrap vm-ops-table">
+        <table>
+          <thead>
+            <tr>
+              <th>Action</th>
+              <th>Recorded</th>
+              <th>Output</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for operation in operations %}
+            <tr>
+              <td>{{ operation.action }}</td>
+              <td class="muted small" data-ts="{{ operation.created_at }}">{{ operation.created_at }}</td>
+              <td>
+                {% if operation.log %}
+                <button
+                  type="button"
+                  class="btn-open"
+                  data-operation-output
+                  data-action="{{ operation.action | e }}"
+                  data-created-at="{{ operation.created_at | e }}"
+                  data-log="{{ operation.log | e }}"
+                >
+                  <i class="bi bi-window-stack me-1"></i>View output
+                </button>
+                {% else %}
+                <span class="muted small">No output captured</span>
+                {% endif %}
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <div class="vm-ops-cards">
+        {% for operation in operations %}
+        <article class="vm-op-card">
+          <div class="vm-op-card-head">
+            <div class="vm-op-card-title">{{ operation.action }}</div>
+            <div class="muted small" data-ts="{{ operation.created_at }}">{{ operation.created_at }}</div>
+          </div>
+          <div>
+            {% if operation.log %}
+            <button
+              type="button"
+              class="btn-open"
+              data-operation-output
+              data-action="{{ operation.action | e }}"
+              data-created-at="{{ operation.created_at | e }}"
+              data-log="{{ operation.log | e }}"
+            >
+              <i class="bi bi-window-stack me-1"></i>View output
+            </button>
+            {% else %}
+            <span class="muted small">No output captured</span>
+            {% endif %}
+          </div>
+        </article>
+        {% endfor %}
+      </div>
+      {% else %}
+      <article class="empty-state">
+        <div class="empty-icon"><i class="bi bi-journal-x"></i></div>
+        <h3>No operations recorded</h3>
       </article>
-      {% endfor %}
-    </div>
-    {% else %}
-    <article class="empty-state">
-      <div class="empty-icon"><i class="bi bi-journal-x"></i></div>
-      <h3>No operations recorded</h3>
+      {% endif %}
     </article>
-    {% endif %}
-  </article>
+
+    <article class="panel">
+      <div class="panel-header">
+        <h2 class="panel-title"><i class="bi bi-gpu-card"></i>Attached PCI devices</h2>
+        <span class="soft-pill">{{ attached_pci_devices | length }}</span>
+      </div>
+      {% if attached_pci_devices %}
+      <div class="stack vm-pci-list">
+        {% for device in attached_pci_devices %}
+        <article class="vm-pci-card">
+          <div class="vm-pci-title">{{ device.name or 'Unknown device' }}</div>
+          <div class="muted small">
+            {{ device.vendor or 'Unknown vendor' }}
+            {% if device.class %} · {{ device.class }}{% endif %}
+          </div>
+          <div class="muted small mono">{{ device.address or '—' }}</div>
+        </article>
+        {% endfor %}
+      </div>
+      {% else %}
+      <article class="empty-state">
+        <div class="empty-icon"><i class="bi bi-gpu-card"></i></div>
+        <h6>No PCI devices attached</h6>
+      </article>
+      {% endif %}
+    </article>
+  </div>
 
 </div>
 
@@ -232,6 +260,10 @@
   }
   .vm-ops-cards {
     display: none;
+  }
+  .vm-detail-side {
+    display: grid;
+    gap: 1rem;
   }
   .vm-header-meta {
     display: inline-flex;
@@ -318,6 +350,22 @@
     color: #0f172a;
     text-transform: capitalize;
   }
+  .vm-pci-list {
+    display: grid;
+    gap: 0.85rem;
+  }
+  .vm-pci-card {
+    display: grid;
+    gap: 0.2rem;
+    padding: 0.95rem;
+    border: 1px solid var(--app-border);
+    border-radius: 0.95rem;
+    background: #fff;
+  }
+  .vm-pci-title {
+    font-weight: 600;
+    color: #0f172a;
+  }
   .log-output-modal {
     max-height: min(65vh, 34rem);
     overflow: auto;
@@ -325,6 +373,11 @@
     overflow-wrap: anywhere;
     word-break: break-word;
     border-radius: 1rem;
+  }
+  @media (min-width: 761px) {
+    .vm-pci-list {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
   }
   @media (max-width: 760px) {
     .vm-ops-table {

@@ -44,6 +44,14 @@
         radial-gradient(circle at bottom right, rgba(16, 185, 129, 0.05), transparent 26%),
         var(--app-bg);
     }
+    a {
+      color: inherit;
+      text-decoration: none;
+    }
+    a:hover {
+      color: #2563eb;
+      text-decoration: underline;
+    }
     .app-shell {
       min-height: var(--app-viewport-height);
       display: grid;
@@ -933,6 +941,11 @@
         <a href="/virtual" class="nav-link {% if request.url.path == '/virtual' %}active{% endif %}">
           <i class="bi bi-pc-display-horizontal"></i><span>Virtual Machines</span>
         </a>
+        {% if user %}
+        <a href="/keys" class="nav-link {% if request.url.path == '/keys' %}active{% endif %}">
+          <i class="bi bi-key"></i><span>SSH Keys</span>
+        </a>
+        {% endif %}
       </nav>
     </section>
 

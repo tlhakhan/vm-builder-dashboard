@@ -36,7 +36,7 @@
         <tr>
 
           {# Server name #}
-          <td><strong>{{ agent.name }}</strong></td>
+          <td><strong><a class="physical-link" href="/physical/{{ agent.name | urlencode }}">{{ agent.name }}</a></strong></td>
 
           {# Reachability #}
           <td>
@@ -51,9 +51,6 @@
           <td>
             {% if node.cpu_total %}
             <span class="fw-semibold">{{ node.cpu_total }} cores</span>
-            {% if node.cpu_model %}
-            <div class="muted small" style="margin-top:0.15rem; max-width:18rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;" title="{{ node.cpu_model }}">{{ node.cpu_model }}</div>
-            {% endif %}
             {% else %}—{% endif %}
           </td>
 
@@ -115,7 +112,7 @@
     <article class="physical-card">
       <div class="physical-card-head">
         <div>
-          <h2 class="physical-card-title">{{ agent.name }}</h2>
+          <h2 class="physical-card-title"><a class="physical-link" href="/physical/{{ agent.name | urlencode }}">{{ agent.name }}</a></h2>
           {% if node.hostname and node.hostname != agent.name %}
           <div class="muted small">{{ node.hostname }}</div>
           {% endif %}
@@ -137,9 +134,6 @@
             {{ node.cpu_total }} cores
             {% else %}—{% endif %}
           </div>
-          {% if node.cpu_model %}
-          <div class="muted small">{{ node.cpu_model }}</div>
-          {% endif %}
         </div>
 
         <div class="physical-card-item">

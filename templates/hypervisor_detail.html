@@ -1,0 +1,285 @@
+{% extends "base.html" %}
+{% set hypervisor_display = agent_name if agent_name else '—' %}
+{% block title %}{{ hypervisor_display }}{% endblock %}
+{% block topbar_title %}<i class="bi bi-hdd-network me-2"></i>{{ agent_name }}{% endblock %}
+
+{% block content %}
+<div class="split hypervisor-detail-split" style="align-items:start;">
+  <article class="panel">
+    <div class="panel-header">
+      <h2 class="panel-title"><i class="bi bi-hdd-network"></i>{{ agent_name }}</h2>
+      {% if agent.reachable %}
+      <span class="status-pill status-running"><i class="bi bi-check-circle"></i>Reachable</span>
+      {% else %}
+      <span class="status-pill status-failed"><i class="bi bi-x-octagon"></i>Unreachable</span>
+      {% endif %}
+    </div>
+
+    {% if not agent.reachable %}
+    <article class="empty-state" style="box-shadow:none; border:0; padding:0;">
+      <div class="empty-icon"><i class="bi bi-exclamation-diamond"></i></div>
+      <h3>Hypervisor details unavailable</h3>
+      <p>The agent is currently unreachable, so live node details could not be loaded.</p>
+    </article>
+    {% else %}
+    <table class="spec-table">
+      <tbody>
+        <tr>
+          <td class="spec-label">Hostname</td>
+          <td>{{ node.hostname or '—' }}</td>
+        </tr>
+        <tr>
+          <td class="spec-label">Operating system</td>
+          <td>{{ node.os_name or '—' }}</td>
+        </tr>
+        <tr>
+          <td class="spec-label">Kernel</td>
+          <td>{{ node.kernel_version or '—' }}</td>
+        </tr>
+        <tr>
+          <td class="spec-label">CPU</td>
+          <td>
+            {% if node.cpu_model %}
+            <div>{{ node.cpu_model }}</div>
+            {% endif %}
+            {% if node.cpu_total %}
+            <div class="muted small">{{ node.cpu_total }} cores</div>
+            {% elif not node.cpu_model %}
+            —
+            {% endif %}
+          </td>
+        </tr>
+        <tr>
+          <td class="spec-label">Memory</td>
+          <td>
+            {% if node.ram_total %}
+            <div class="resource-detail">
+              <div class="res-row">
+                <span>{{ node.ram_used or '—' }} / {{ node.ram_total }} GB used</span>
+                {% if node.ram_pct is not none %}<span class="muted small">{{ node.ram_pct }}%</span>{% endif %}
+              </div>
+              {% if node.ram_pct is not none %}
+              {% set ram_bar_class = 'usage-bar-fill' %}
+              {% if node.ram_pct > 85 %}
+              {% set ram_bar_class = ram_bar_class + ' usage-bar-danger' %}
+              {% elif node.ram_pct > 65 %}
+              {% set ram_bar_class = ram_bar_class + ' usage-bar-warn' %}
+              {% endif %}
+              <div class="usage-bar" aria-label="Memory usage {{ node.ram_pct }} percent">
+                <div class="{{ ram_bar_class }}" style="width: {{ node.ram_pct }}%;"></div>
+              </div>
+              {% endif %}
+            </div>
+            {% else %}—{% endif %}
+          </td>
+        </tr>
+        <tr>
+          <td class="spec-label">Disk</td>
+          <td>
+            {% if node.disk_total %}
+            <div class="resource-detail">
+              <div class="res-row">
+                <span>{{ node.disk_used or '—' }} / {{ node.disk_total }} GB used</span>
+                {% if node.disk_pct is not none %}<span class="muted small">{{ node.disk_pct }}%</span>{% endif %}
+              </div>
+              {% if node.disk_pct is not none %}
+              {% set disk_bar_class = 'usage-bar-fill' %}
+              {% if node.disk_pct > 85 %}
+              {% set disk_bar_class = disk_bar_class + ' usage-bar-danger' %}
+              {% elif node.disk_pct > 65 %}
+              {% set disk_bar_class = disk_bar_class + ' usage-bar-warn' %}
+              {% endif %}
+              <div class="usage-bar" aria-label="Disk usage {{ node.disk_pct }} percent">
+                <div class="{{ disk_bar_class }}" style="width: {{ node.disk_pct }}%;"></div>
+              </div>
+              {% endif %}
+            </div>
+            {% else %}—{% endif %}
+          </td>
+        </tr>
+        <tr>
+          <td class="spec-label">VMs</td>
+          <td>
+            {% if node.vms_total is not none %}
+            {{ node.vms_running }} running / {{ node.vms_total }} total
+            {% else %}—{% endif %}
+          </td>
+        </tr>
+      </tbody>
+    </table>
+    {% endif %}
+  </article>
+
+  <article class="panel">
+    <div class="panel-header">
+      <h2 class="panel-title"><i class="bi bi-gpu-card"></i>PCI Devices</h2>
+      <span class="soft-pill">{{ node.pci_devices | length if node.pci_devices else 0 }}</span>
+    </div>
+
+    {% if not agent.reachable %}
+    <article class="empty-state">
+      <div class="empty-icon"><i class="bi bi-plug"></i></div>
+      <h3>PCI inventory unavailable</h3>
+      <p>Reconnect to this hypervisor to load its PCI device inventory.</p>
+    </article>
+    {% elif node.pci_devices %}
+    <div class="stack pci-device-list">
+      {% for device in node.pci_devices %}
+      <article class="pci-device-card">
+        <div class="pci-device-head">
+          <div>
+            <h3 class="pci-device-title">{{ device.name or 'Unknown device' }}</h3>
+            <div class="muted small">
+              {{ device.vendor or 'Unknown vendor' }}
+              {% if device.class %} · {{ device.class }}{% endif %}
+            </div>
+          </div>
+          {% if device.available %}
+          <span class="status-pill status-running"><i class="bi bi-check-circle"></i>Available</span>
+          {% else %}
+          <span class="status-pill status-failed"><i class="bi bi-link-45deg"></i>Attached</span>
+          {% endif %}
+        </div>
+        <table class="spec-table pci-spec-table">
+          <tbody>
+            <tr>
+              <td class="spec-label">Address</td>
+              <td class="mono small">{{ device.address or '—' }}</td>
+            </tr>
+            <tr>
+              <td class="spec-label">Class</td>
+              <td>
+                {{ device.class or '—' }}
+                {% if device.class_id %}<span class="muted small">({{ device.class_id }})</span>{% endif %}
+              </td>
+            </tr>
+            <tr>
+              <td class="spec-label">Vendor</td>
+              <td>
+                {{ device.vendor or '—' }}
+                {% if device.vendor_id %}<span class="muted small">({{ device.vendor_id }})</span>{% endif %}
+              </td>
+            </tr>
+            <tr>
+              <td class="spec-label">Device ID</td>
+              <td>
+                {{ device.device_id or '—' }}
+                {% if device.sub_vendor or device.sub_device %}
+                <div class="muted small">
+                  {% if device.sub_vendor %}{{ device.sub_vendor }}{% endif %}
+                  {% if device.sub_device %}{% if device.sub_vendor %} · {% endif %}{{ device.sub_device }}{% endif %}
+                </div>
+                {% endif %}
+              </td>
+            </tr>
+            <tr>
+              <td class="spec-label">Attached to</td>
+              <td>
+                {% if device.attached_to %}
+                <a href="/vm/{{ agent_name | urlencode }}/{{ device.attached_to | urlencode }}">{{ device.attached_to }}</a>
+                {% else %}
+                —
+                {% endif %}
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </article>
+      {% endfor %}
+    </div>
+    {% else %}
+    <article class="empty-state">
+      <div class="empty-icon"><i class="bi bi-gpu-card"></i></div>
+      <h3>No PCI devices reported</h3>
+      <p>This hypervisor did not return any PCI device inventory.</p>
+    </article>
+    {% endif %}
+  </article>
+</div>
+{% endblock %}
+
+{% block head %}
+<style>
+  @media (min-width: 761px) {
+    .hypervisor-detail-split {
+      grid-template-columns: minmax(20rem, 26rem) minmax(0, 1fr);
+    }
+  }
+  .spec-table {
+    width: 100%;
+    margin: 0;
+  }
+  .spec-table td {
+    padding: 0.5rem 0;
+    border-bottom: 1px solid var(--app-border);
+    vertical-align: top;
+  }
+  .spec-table tbody tr:last-child td {
+    border-bottom: 0;
+  }
+  .spec-label {
+    color: var(--app-text-muted);
+    font-size: 0.82rem;
+    width: 8.5rem;
+  }
+  .resource-detail {
+    display: grid;
+    gap: 0.35rem;
+  }
+  .res-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 0.5rem;
+    font-size: 0.88rem;
+  }
+  .usage-bar {
+    width: 100%;
+    height: 0.65rem;
+    overflow: hidden;
+    border-radius: 999px;
+    background: rgba(148, 163, 184, 0.18);
+  }
+  .usage-bar-fill {
+    height: 100%;
+    border-radius: inherit;
+    background: #2563eb;
+  }
+  .usage-bar-warn {
+    background: #d97706;
+  }
+  .usage-bar-danger {
+    background: #dc2626;
+  }
+  .pci-device-list {
+    gap: 0.9rem;
+  }
+  .pci-device-card {
+    padding: 1rem;
+    border: 1px solid var(--app-border);
+    border-radius: 1rem;
+    background: #fff;
+    box-shadow: 0 4px 16px rgba(15, 23, 42, 0.06);
+  }
+  .pci-device-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 0.75rem;
+    margin-bottom: 0.8rem;
+  }
+  .pci-device-title {
+    margin: 0 0 0.25rem;
+    font-size: 1rem;
+  }
+  .pci-spec-table .spec-label {
+    width: 7.5rem;
+  }
+  @media (max-width: 760px) {
+    .pci-device-head {
+      flex-direction: column;
+      align-items: flex-start;
+    }
+  }
+</style>
+{% endblock %}
