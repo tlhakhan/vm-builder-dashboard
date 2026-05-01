@@ -43,7 +43,7 @@
           <th>State</th>
           <th>vCPU</th>
           <th>RAM</th>
-          <th>Disk</th>
+          <th>Storage</th>
           {% if user.role in ('admin', 'operator') %}
           <th class="virtual-actions-col">Actions</th>
           {% endif %}
@@ -64,8 +64,7 @@
             {% else %}—{% endif %}
           </td>
           <td>
-            {% set disk = vm.get('disk_gb') %}
-            {% if disk %}{{ disk }} GB{% else %}—{% endif %}
+            {{ vm.get('disk_label') or '—' }}
           </td>
           {% if user.role in ('admin', 'operator') %}
           <td class="virtual-actions-cell">
@@ -175,10 +174,9 @@
           </div>
         </div>
         <div class="virtual-card-item">
-          <div class="virtual-card-label">Disk</div>
+          <div class="virtual-card-label">Storage</div>
           <div class="virtual-card-value">
-            {% set disk = vm.get('disk_gb') %}
-            {% if disk %}{{ disk }} GB{% else %}—{% endif %}
+            {{ vm.get('disk_label') or '—' }}
           </div>
         </div>
       </div>
@@ -212,7 +210,7 @@
     </div>
     <label for="vmName">Name</label>
     <input type="text" id="vmName" placeholder="e.g. ubuntu-3, docker-4, webapp-2" autocomplete="off">
-    <div class="metric-grid" style="grid-template-columns: 1fr 1fr 1fr; gap: 0.75rem;">
+    <div class="metric-grid" style="grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0.75rem;">
       <label>
         vCPU
         <input type="number" id="vmCpu" value="2" min="1" max="64">
@@ -222,10 +220,16 @@
         <input type="number" id="vmMemory" value="4" min="1" max="512">
       </label>
       <label>
-        Disk (GiB)
-        <input type="number" id="vmDisk" value="20" min="1" max="2048">
+        Root storage (GiB)
+        <input type="number" id="vmRootDisk" value="48" min="1" max="2048">
+      </label>
+      <label>
+        Data storage (GiB)
+        <input type="number" id="vmDataDisk" value="0" min="0" max="65536">
       </label>
     </div>
+    <label for="vmLaunchScriptUrl">Launch script URL <span class="muted small">(Optional)</span></label>
+    <input type="url" id="vmLaunchScriptUrl" placeholder="https://gist.githubusercontent.com/..." autocomplete="off">
     <label for="vmImagePreset">Cloud image</label>
     <select id="vmImagePreset">
       <option value="https://cloud-images.ubuntu.com/resolute/current/resolute-server-cloudimg-amd64.img">Ubuntu 26.04 LTS (Resolute)</option>
@@ -584,7 +588,9 @@ async function createVm() {
   const name = document.getElementById('vmName').value.trim();
   const cpu = parseInt(document.getElementById('vmCpu').value, 10);
   const memory_gib = parseInt(document.getElementById('vmMemory').value, 10);
-  const disk_gib = parseInt(document.getElementById('vmDisk').value, 10);
+  const root_disk_size_gib = parseInt(document.getElementById('vmRootDisk').value, 10);
+  const data_disk_size_gib = parseInt(document.getElementById('vmDataDisk').value, 10) || 0;
+  const launch_script_url = document.getElementById('vmLaunchScriptUrl').value.trim();
   const cloud_image_url = getImageUrl();
   const automation_user = document.getElementById('vmAutomationUser').value.trim() || 'ubuntu';
   const automation_user_pubkey = document.getElementById('vmAuthorizedKey').value.trim();
@@ -602,13 +608,25 @@ async function createVm() {
     showInlineAlert(alert, 'warning', 'SSH key selection is required.');
     return;
   }
+  if (!root_disk_size_gib || root_disk_size_gib < 1) {
+    showInlineAlert(alert, 'warning', 'Root storage size must be at least 1 GiB.');
+    return;
+  }
+  if (data_disk_size_gib < 0) {
+    showInlineAlert(alert, 'warning', 'Data storage size cannot be negative.');
+    return;
+  }
 
   setCreateVmSubmitting(true);
   try {
-    const data = await apiFetch(`/api/agents/${encodeURIComponent(agentName)}/vm/create`, 'POST', {
-      name, cpu, memory_gib, disks_gib: [disk_gib], cloud_image_url,
+    const payload = {
+      name, cpu, memory_gib, root_disk_size_gib, data_disk_size_gib, cloud_image_url,
       automation_user, automation_user_pubkey, console_user, console_password, pci_devices
-    });
+    };
+    if (launch_script_url) {
+      payload.launch_script_url = launch_script_url;
+    }
+    const data = await apiFetch(`/api/agents/${encodeURIComponent(agentName)}/vm/create`, 'POST', payload);
     const createdName = data.name || name;
     showInlineAlert(alert, 'success', `VM ${createdName} is being prepared. Opening it when it becomes available…`);
     const ready = await waitForVm(agentName, createdName);

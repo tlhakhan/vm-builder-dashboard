@@ -110,6 +110,13 @@ def _cloud_image_filename(value) -> str | None:
     return name or None
 
 
+def _disk_size_from_creation_params(creation_params: dict, key: str) -> int | None:
+    value = creation_params.get(key)
+    if value is None and key == "root_disk_size_gib":
+        value = (creation_params.get("disks_gib") or [None])[0]
+    return _parse_int(value)
+
+
 def _normalize_vm_common(raw_vm: dict, default_agent_name: str = "") -> dict:
     """
     Normalize common VM fields into the stable shape the templates expect.
@@ -143,6 +150,26 @@ def _normalize_vm_common(raw_vm: dict, default_agent_name: str = "") -> dict:
         or creation_params.get("image_url")
     )
     cloud_image_filename = _cloud_image_filename(cloud_image_url)
+    root_disk_gb = (
+        _parse_int(raw_vm.get("root_disk_size_gib"))
+        or _parse_int(vm_data.get("root_disk_size_gib"))
+        or _disk_size_from_creation_params(creation_params, "root_disk_size_gib")
+        or _parse_int(raw_vm.get("disk_gb"))
+        or _parse_int(vm_data.get("disk_gb"))
+        or _parse_int(raw_vm.get("disk"))
+        or _parse_int(vm_data.get("disk"))
+    )
+    data_disk_gb = (
+        _parse_int(raw_vm.get("data_disk_size_gib"))
+        or _parse_int(vm_data.get("data_disk_size_gib"))
+        or _disk_size_from_creation_params(creation_params, "data_disk_size_gib")
+    )
+    disk_parts = []
+    if root_disk_gb:
+        disk_parts.append(f"{root_disk_gb} GB root")
+    if data_disk_gb:
+        disk_parts.append(f"{data_disk_gb} GB data")
+    disk_label = " + ".join(disk_parts) if disk_parts else None
 
     return {
         **raw_vm,
@@ -167,19 +194,21 @@ def _normalize_vm_common(raw_vm: dict, default_agent_name: str = "") -> dict:
             or raw_vm.get("memory_mb")
         ),
         "used_ram_mb": _kib_string_to_mb(vm_data.get("used_memory") or raw_vm.get("used_memory")),
-        "disk_gb": (
-            raw_vm.get("disk_gb")
-            or vm_data.get("disk_gb")
-            or raw_vm.get("disk")
-            or vm_data.get("disk")
-            or (creation_params.get("disks_gib") or [None])[0]
-        ),
+        "disk_gb": root_disk_gb,
+        "root_disk_gb": root_disk_gb,
+        "data_disk_gb": data_disk_gb,
+        "disk_label": disk_label,
         "id": vm_data.get("id") or raw_vm.get("id"),
         "uuid": vm_data.get("uuid") or raw_vm.get("uuid"),
         "persistent": vm_data.get("persistent") or raw_vm.get("persistent"),
         "autostart": vm_data.get("autostart") or raw_vm.get("autostart"),
         "cloud_image_url": cloud_image_url,
         "cloud_image_filename": cloud_image_filename,
+        "launch_script_url": (
+            vm_data.get("launch_script_url")
+            or raw_vm.get("launch_script_url")
+            or creation_params.get("launch_script_url")
+        ),
         "creation_params": creation_params,
     }
 
@@ -244,7 +273,9 @@ def _normalize_node_stats(node: dict | None) -> dict:
 
     cpu    = node.get("cpu")    or {}
     memory = node.get("memory") or {}
-    disk   = node.get("disk")   or {}
+    storage = node.get("storage") or {}
+    disk   = storage.get("primary") or node.get("disk") or {}
+    secondary_disk = storage.get("secondary") or {}
     vms    = node.get("vms")    or {}
 
     def gib(value):
@@ -264,6 +295,9 @@ def _normalize_node_stats(node: dict | None) -> dict:
     disk_total = gib(disk.get("total_bytes"))
     disk_used  = gib(disk.get("used_bytes"))
     disk_free = gib(disk.get("free_bytes"))
+    secondary_disk_total = gib(secondary_disk.get("total_bytes"))
+    secondary_disk_used = gib(secondary_disk.get("used_bytes"))
+    secondary_disk_free = gib(secondary_disk.get("free_bytes"))
 
     pci_devices = []
     for raw_device in node.get("pci_devices") or []:
@@ -299,6 +333,11 @@ def _normalize_node_stats(node: dict | None) -> dict:
         "disk_used":    disk_used,
         "disk_free":    disk_free,
         "disk_pct":     pct(disk_used, disk_total),
+        "secondary_disk_total": secondary_disk_total,
+        "secondary_disk_used": secondary_disk_used,
+        "secondary_disk_free": secondary_disk_free,
+        "secondary_disk_pct": pct(secondary_disk_used, secondary_disk_total),
+        "secondary_disk_health": secondary_disk.get("health"),
         "vms_total":    vms.get("total",   0),
         "vms_running":  vms.get("running", 0),
         "hostname":     node.get("hostname"),
@@ -321,6 +360,9 @@ def _normalize_vm_detail(raw_vm: dict | None, agent_name: str = "") -> dict | No
             disk_gb = first_disk.get("size_gb") or first_disk.get("size")
 
     normalized["disk_gb"] = _parse_int(disk_gb)
+    normalized["root_disk_gb"] = normalized["disk_gb"]
+    if not normalized.get("disk_label") and normalized["root_disk_gb"]:
+        normalized["disk_label"] = f"{normalized['root_disk_gb']} GB root"
     return normalized
 
 

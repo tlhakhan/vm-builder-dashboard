@@ -54,10 +54,6 @@
           <td>
             {% if node.ram_total %}
             <div class="resource-detail">
-              <div class="res-row">
-                <span>{{ node.ram_used or '—' }} / {{ node.ram_total }} GB used</span>
-                {% if node.ram_pct is not none %}<span class="muted small">{{ node.ram_pct }}%</span>{% endif %}
-              </div>
               {% if node.ram_pct is not none %}
               {% set ram_bar_class = 'usage-bar-fill' %}
               {% if node.ram_pct > 85 %}
@@ -65,8 +61,16 @@
               {% elif node.ram_pct > 65 %}
               {% set ram_bar_class = ram_bar_class + ' usage-bar-warn' %}
               {% endif %}
-              <div class="usage-bar" aria-label="Memory usage {{ node.ram_pct }} percent">
-                <div class="{{ ram_bar_class }}" style="width: {{ node.ram_pct }}%;"></div>
+              <div class="usage-meter">
+                <div class="usage-bar" aria-label="Memory usage {{ node.ram_pct }} percent">
+                  <div class="{{ ram_bar_class }}" style="width: {{ node.ram_pct }}%;"></div>
+                </div>
+                <span class="usage-percent">{{ node.ram_pct }}%</span>
+                <div class="usage-tooltip" role="tooltip">
+                  <div><span>Used</span><strong>{{ node.ram_used or '—' }} GB</strong></div>
+                  <div><span>Free</span><strong>{{ node.ram_free or '—' }} GB</strong></div>
+                  <div><span>Total</span><strong>{{ node.ram_total }} GB</strong></div>
+                </div>
               </div>
               {% endif %}
             </div>
@@ -74,14 +78,11 @@
           </td>
         </tr>
         <tr>
-          <td class="spec-label">Disk</td>
+          <td class="spec-label">Storage</td>
           <td>
             {% if node.disk_total %}
             <div class="resource-detail">
-              <div class="res-row">
-                <span>{{ node.disk_used or '—' }} / {{ node.disk_total }} GB used</span>
-                {% if node.disk_pct is not none %}<span class="muted small">{{ node.disk_pct }}%</span>{% endif %}
-              </div>
+              <div class="muted small" style="margin-bottom:0.25rem;">Primary</div>
               {% if node.disk_pct is not none %}
               {% set disk_bar_class = 'usage-bar-fill' %}
               {% if node.disk_pct > 85 %}
@@ -89,9 +90,41 @@
               {% elif node.disk_pct > 65 %}
               {% set disk_bar_class = disk_bar_class + ' usage-bar-warn' %}
               {% endif %}
-              <div class="usage-bar" aria-label="Disk usage {{ node.disk_pct }} percent">
-                <div class="{{ disk_bar_class }}" style="width: {{ node.disk_pct }}%;"></div>
+              <div class="usage-meter">
+                <div class="usage-bar" aria-label="Primary storage usage {{ node.disk_pct }} percent">
+                  <div class="{{ disk_bar_class }}" style="width: {{ node.disk_pct }}%;"></div>
+                </div>
+                <span class="usage-percent">{{ node.disk_pct }}%</span>
+                <div class="usage-tooltip" role="tooltip">
+                  <div><span>Used</span><strong>{{ node.disk_used or '—' }} GB</strong></div>
+                  <div><span>Free</span><strong>{{ node.disk_free or '—' }} GB</strong></div>
+                  <div><span>Total</span><strong>{{ node.disk_total }} GB</strong></div>
+                </div>
               </div>
+              {% endif %}
+              {% if node.secondary_disk_total %}
+              <div class="muted small" style="margin-top:0.65rem; margin-bottom:0.25rem;">
+                Secondary
+              </div>
+              {% if node.secondary_disk_pct is not none %}
+              {% set secondary_disk_bar_class = 'usage-bar-fill' %}
+              {% if node.secondary_disk_pct > 85 %}
+              {% set secondary_disk_bar_class = secondary_disk_bar_class + ' usage-bar-danger' %}
+              {% elif node.secondary_disk_pct > 65 %}
+              {% set secondary_disk_bar_class = secondary_disk_bar_class + ' usage-bar-warn' %}
+              {% endif %}
+              <div class="usage-meter">
+                <div class="usage-bar" aria-label="Secondary storage usage {{ node.secondary_disk_pct }} percent">
+                  <div class="{{ secondary_disk_bar_class }}" style="width: {{ node.secondary_disk_pct }}%;"></div>
+                </div>
+                <span class="usage-percent">{{ node.secondary_disk_pct }}%</span>
+                <div class="usage-tooltip" role="tooltip">
+                  <div><span>Used</span><strong>{{ node.secondary_disk_used or '—' }} GB</strong></div>
+                  <div><span>Free</span><strong>{{ node.secondary_disk_free or '—' }} GB</strong></div>
+                  <div><span>Total</span><strong>{{ node.secondary_disk_total }} GB</strong></div>
+                </div>
+              </div>
+              {% endif %}
               {% endif %}
             </div>
             {% else %}—{% endif %}
@@ -239,6 +272,69 @@
     overflow: hidden;
     border-radius: 999px;
     background: rgba(148, 163, 184, 0.18);
+  }
+  .usage-meter {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 0.55rem;
+    position: relative;
+    cursor: default;
+    text-decoration: none;
+  }
+  .usage-tooltip {
+    position: absolute;
+    right: 0;
+    bottom: calc(100% + 0.5rem);
+    z-index: 10;
+    display: grid;
+    gap: 0.2rem;
+    min-width: 9.5rem;
+    padding: 0.55rem 0.65rem;
+    border-radius: 0.5rem;
+    background: #0f172a;
+    color: #fff;
+    font-size: 0.76rem;
+    line-height: 1.35;
+    opacity: 0;
+    pointer-events: none;
+    transform: translateY(0.25rem);
+    transition: opacity 0.12s ease, transform 0.12s ease;
+    box-shadow: 0 10px 24px rgba(15, 23, 42, 0.22);
+  }
+  .usage-tooltip div {
+    display: flex;
+    justify-content: space-between;
+    gap: 1.25rem;
+  }
+  .usage-tooltip span {
+    color: rgba(255, 255, 255, 0.72);
+  }
+  .usage-tooltip strong {
+    font-weight: 600;
+    white-space: nowrap;
+  }
+  .usage-meter:hover .usage-tooltip,
+  .usage-meter:focus-within .usage-tooltip {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  .spec-table tbody tr:nth-child(4) .usage-tooltip {
+    top: calc(100% + 0.5rem);
+    bottom: auto;
+    transform: translateY(-0.25rem);
+  }
+  .spec-table tbody tr:nth-child(4) .usage-meter:hover .usage-tooltip,
+  .spec-table tbody tr:nth-child(4) .usage-meter:focus-within .usage-tooltip {
+    transform: translateY(0);
+  }
+  .usage-percent {
+    min-width: 2.4rem;
+    color: var(--app-text-muted);
+    font-size: 0.78rem;
+    line-height: 1;
+    text-align: right;
+    white-space: nowrap;
   }
   .usage-bar-fill {
     height: 100%;

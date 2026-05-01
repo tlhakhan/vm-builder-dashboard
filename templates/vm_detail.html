@@ -57,11 +57,8 @@
           </td>
         </tr>
         <tr>
-          <td class="spec-label">Disk</td>
-          <td>
-            {% set disk = vm.get('disk_gb') %}
-            {% if disk %}{{ disk }} GB{% else %}—{% endif %}
-          </td>
+          <td class="spec-label">Storage</td>
+          <td>{{ vm.get('disk_label') or '—' }}</td>
         </tr>
         <tr>
           <td class="spec-label">Image</td>
@@ -89,6 +86,16 @@
           <td class="spec-label">Hypervisor</td>
           <td><a href="/physical/{{ agent_name | urlencode }}">{{ agent_name }}</a></td>
         </tr>
+        {% if vm.get('launch_script_url') %}
+        <tr>
+          <td class="spec-label">Launch script</td>
+          <td class="launch-script-cell">
+            <a class="launch-script-link" href="{{ vm.get('launch_script_url') }}" target="_blank" rel="noopener" title="{{ vm.get('launch_script_url') }}">
+              {{ vm.get('launch_script_url') }}
+            </a>
+          </td>
+        </tr>
+        {% endif %}
       </tbody>
     </table>
     {% endif %}
@@ -274,10 +281,21 @@
   .vm-header-meta .status-pill {
     font-weight: 500;
   }
-  .spec-table { width: 100%; margin: 0; }
+  .spec-table { width: 100%; margin: 0; table-layout: fixed; }
   .spec-table td { padding: 0.45rem 0; border-bottom: 1px solid var(--app-border); }
   .spec-table tbody tr:last-child td { border-bottom: 0; }
   .spec-label { color: var(--app-text-muted); font-size: 0.82rem; width: 7rem; }
+  .launch-script-cell {
+    min-width: 0;
+  }
+  .launch-script-link {
+    display: inline-block;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    vertical-align: bottom;
+    white-space: nowrap;
+  }
   .autostart-pill {
     display: inline-flex;
     align-items: center;
