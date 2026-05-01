@@ -234,7 +234,9 @@
       <option value="https://cloud-images.ubuntu.com/focal/current/focal-server-cloudimg-amd64.img">Ubuntu 20.04 LTS (Focal)</option>
     </select>
     <label for="vmAutomationUser">Automation user</label>
-    <input type="text" id="vmAutomationUser" value="ubuntu" autocomplete="off">
+    <input type="text" id="vmAutomationUser" value="ubuntu" autocomplete="off" oninput="document.getElementById('vmConsoleUsername').value = this.value.trim() || 'ubuntu'">
+    <input type="hidden" id="vmConsoleUsername" value="ubuntu">
+    <input type="hidden" id="vmConsolePassword" value="">
     <label for="vmAuthorizedKey">SSH key</label>
     <select id="vmAuthorizedKey">
       <option value="">Select an SSH key</option>
@@ -586,6 +588,8 @@ async function createVm() {
   const cloud_image_url = getImageUrl();
   const automation_user = document.getElementById('vmAutomationUser').value.trim() || 'ubuntu';
   const automation_user_pubkey = document.getElementById('vmAuthorizedKey').value.trim();
+  const console_username = document.getElementById('vmConsoleUsername').value || automation_user;
+  const console_password = document.getElementById('vmConsolePassword').value;
   const pci_devices = Array.from(document.querySelectorAll('[data-pci-device-checkbox]:checked'))
     .map((item) => item.value)
     .filter(Boolean);
@@ -603,7 +607,7 @@ async function createVm() {
   try {
     const data = await apiFetch(`/api/agents/${encodeURIComponent(agentName)}/vm/create`, 'POST', {
       name, cpu, memory_gib, disks_gib: [disk_gib], cloud_image_url,
-      automation_user, automation_user_pubkey, pci_devices
+      automation_user, automation_user_pubkey, console_username, console_password, pci_devices
     });
     const createdName = data.name || name;
     showInlineAlert(alert, 'success', `VM ${createdName} is being prepared. Opening it when it becomes available…`);
